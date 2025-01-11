@@ -1,0 +1,91 @@
+openapi: 3.0.0
+info:
+  title: Authentication API
+  description: API for user login and signup
+  version: 1.0.0
+servers:
+- url: https://your-api-domain.com
+  description: Production Server
+- url: http://localhost:3000
+  description: Development Server
+paths:
+  /signup:
+    post:
+      summary: User Signup
+      description: Endpoint for user signup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/signup_body'
+        required: true
+      responses:
+        "200":
+          description: Signup successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        "400":
+          description: Invalid input
+  /login:
+    post:
+      summary: User Login
+      description: Endpoint for user login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/login_body'
+        required: true
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        "401":
+          description: Unauthorized
+        "400":
+          description: Invalid input
+components:
+  schemas:
+    signup_body:
+      required:
+      - email
+      - password
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    inline_response_200:
+      type: object
+      properties:
+        message:
+          type: string
+        userId:
+          type: string
+    login_body:
+      required:
+      - email
+      - password
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    inline_response_200_1:
+      type: object
+      properties:
+        message:
+          type: string
+        token:
+          type: string
