@@ -1,0 +1,74 @@
+/* General styling for the container */
+.signup-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 100vh;
+    background-color: #f7f9fc;
+    padding: 20px;
+  }
+  
+  /* Form heading */
+  .signup-container h2 {
+    font-size: 2rem;
+    color: #333;
+    margin-bottom: 20px;
+  }
+  
+  /* Input fields */
+  .signup-container input,
+  .signup-container select,
+  .signup-container button {
+    width: 100%;
+    max-width: 400px;
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+  }
+  
+  /* Focus styling for input fields */
+  .signup-container input:focus,
+  .signup-container select:focus,
+  .signup-container button:focus {
+    outline: none;
+    border-color: #007bff;
+  }
+  
+  /* Button styling */
+  .signup-container button {
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s;
+  }
+  
+  .signup-container button:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Message display */
+  .signup-container p {
+    font-size: 1rem;
+    color: #333;
+    margin-top: 10px;
+  }
+  
+  /* Styling for the login redirect message */
+  .signup-container .login-redirect {
+    margin-top: 20px;
+    font-size: 1rem;
+  }
+  
+  .signup-container .login-redirect a {
+    color: #007bff;
+    text-decoration: none;
+  }
+  
+  .signup-container .login-redirect a:hover {
+    text-decoration: underline;
+  }
+  
