@@ -1,18 +1,34 @@
 # Node.js dependencies
-node_modules/
+**/node_modules/
 
-# Environment variables file
+# Environment variable files
 .env
+/backend/.env
 
 # Build directories
-/dist/
-/build/
+**/dist/
+**/build/
 
 # Logs
 *.log
 
-# Operating system files (like macOS .DS_Store)
+# OS-specific files
 .DS_Store
 Thumbs.db
 
-/backend/.env
+# IDE and editor-specific files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Dependency directories
+/backend/node_modules/
+/therapy-app/node_modules/
+
+# Package manager files (e.g., Yarn, pnpm)
+yarn.lock
+pnpm-lock.yaml
+
+# Optional npm debug files
+npm-debug.log*
