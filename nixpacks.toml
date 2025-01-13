@@ -2,11 +2,12 @@
   [phases.setup]
   command = "corepack enable && corepack prepare npm@latest --activate"
 
-[build]
-  command = "cd therapy-app && npm install && npm run build && cd ../backend && npm install"
+  [phases.build]
+  command = "cd frontend && npm install && npm run build && cd ../backend && npm install"
 
 [start]
-  command = "npm run start"
+  command = "node backend/server.js"
 
 [variables]
   NODE_VERSION = "18"
+  PORT = "5000"
