@@ -10,4 +10,3 @@
 
 [variables]
   NODE_VERSION = "18"
-  PORT = "5000"
