@@ -1,12 +1,12 @@
 [phases]
   [phases.setup]
-  command = "corepack enable && corepack prepare npm@latest --activate"
+  command = "npm install -g npm@latest"  # Ensure npm is updated
 
 [build]
-  command = "cd therapy-app && npm install && npm run build && cd ../backend && npm install"
+  command = "npm install --prefix backend"  # Install only backend dependencies
 
 [start]
-  command = "node backend/server.js"
+  command = "node backend/server.js"  # Start the backend server
 
 [variables]
   NODE_VERSION = "18"
