@@ -1,9 +1,9 @@
 [phases]
   [phases.setup]
-  command = "npm install -g npm@latest"
+  command = "corepack enable && corepack prepare npm@latest --activate"
 
 [build]
-  command = "npm install --prefix therapy-app && npm run build --prefix therapy-app && cd ../backend && npm install"
+  command = "cd therapy-app && npm install && npm run build && cd ../backend && npm install"
 
 [start]
   command = "node backend/server.js"
