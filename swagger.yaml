@@ -1,14 +1,15 @@
 openapi: 3.0.0
 info:
-  title: Authentication API
-  description: API for user login and signup
+  title: Therapy Management API
+  description: API for managing clients, therapists, sessions, journals, and communication.
   version: 1.0.0
 servers:
-- url: https://your-api-domain.com
-  description: Production Server
-- url: http://localhost:5000
-  description: Development Server
+  - url: https://your-api-domain.com
+    description: Production Server
+  - url: http://localhost:5000
+    description: Development Server
 paths:
+  # Authentication Endpoints
   /signup:
     post:
       summary: User Signup
@@ -49,31 +50,263 @@ paths:
           description: Unauthorized
         "400":
           description: Invalid input
+
+  # Clients Endpoints
+  /clients:
+    post:
+      summary: Create a client profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/client_body'
+        required: true
+      responses:
+        "201":
+          description: Client profile created
+    get:
+      summary: List all clients
+      responses:
+        "200":
+          description: A list of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/client'
+
+  /clients/{clientId}:
+    get:
+      summary: Retrieve a client’s profile
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client profile retrieved
+    put:
+      summary: Update a client’s profile
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/client_body'
+        required: true
+      responses:
+        "200":
+          description: Client profile updated
+    delete:
+      summary: Delete a client’s profile
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Client profile deleted
+
+  # Therapists Endpoints
+  /therapists:
+    post:
+      summary: Create a therapist profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/therapist_body'
+        required: true
+      responses:
+        "201":
+          description: Therapist profile created
+    get:
+      summary: List all therapists
+      responses:
+        "200":
+          description: A list of therapists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/therapist'
+
+  /therapists/{therapistId}:
+    get:
+      summary: Retrieve a therapist’s profile
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Therapist profile retrieved
+    put:
+      summary: Update a therapist’s profile
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/therapist_body'
+        required: true
+      responses:
+        "200":
+          description: Therapist profile updated
+    delete:
+      summary: Delete a therapist’s profile
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Therapist profile deleted
+
+  # Journals Endpoints
+  /journals:
+    post:
+      summary: Add a new journal entry
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/journal_entry_body'
+        required: true
+      responses:
+        "201":
+          description: Journal entry created
+    get:
+      summary: Retrieve all journal entries for the authenticated client
+      responses:
+        "200":
+          description: List of journal entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/journal_entry'
+
+  # Therapist-Client Mapping Endpoints
+  /clients/{clientId}/therapists:
+    post:
+      summary: Map a therapist to a client
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/therapist_mapping'
+        required: true
+      responses:
+        "200":
+          description: Mapping created
+
+  # Sessions Endpoints
+  /sessions:
+    post:
+      summary: Create a new session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/session_body'
+        required: true
+      responses:
+        "201":
+          description: Session created
+    get:
+      summary: List all sessions
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/session'
+
+  # Messaging Endpoints
+  /messages:
+    post:
+      summary: Send a message (client or therapist)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/message_body'
+        required: true
+      responses:
+        "200":
+          description: Message sent successfully
+    get:
+      summary: Retrieve message history between a client and therapist
+      responses:
+        "200":
+          description: Message history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/message'
+
 components:
   schemas:
+    # Authentication Schemas
     signup_body:
-      required:
-      - email
-      - password
-      - role
       type: object
+      required:
+        - email
+        - password
+        - role
       properties:
         email:
           type: string
           format: email
-          example: user@example.com
         password:
           type: string
-          format: password
-          example: password123
         role:
           type: string
-          description: "The role of the user, defaults to client but can be set to therapist."
-          example: client
-          default: client
-          enum:
-          - client
-          - therapist
+          enum: [client, therapist]
+    login_body:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
     inline_response_200:
       type: object
       properties:
@@ -81,18 +314,6 @@ components:
           type: string
         userId:
           type: string
-    login_body:
-      required:
-      - email
-      - password
-      type: object
-      properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          format: password
     inline_response_200_1:
       type: object
       properties:
@@ -100,4 +321,188 @@ components:
           type: string
         token:
           type: string
+    
+    # Client Schema
+    client_body:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+    client:
+      type: object
+      required:
+        - clientId
+        - email
+        - name
+      properties:
+        clientId:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        mappedTherapists:
+          type: array
+          items:
+            type: string
+            description: Therapist IDs mapped to the client.
 
+    # Therapist Schema
+    therapist_body:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+    therapist:
+      type: object
+      required:
+        - therapistId
+        - email
+        - name
+      properties:
+        therapistId:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        clients:
+          type: array
+          items:
+            type: string
+            description: Client IDs mapped to the therapist.
+
+    # Journal Entry Schema
+    journal_entry_body:
+      type: object
+      required:
+        - emotion
+        - intensity
+      properties:
+        emotion:
+          type: string
+        intensity:
+          type: integer
+          description: Intensity of the emotion, from 1 to 10.
+    journal_entry:
+      type: object
+      required:
+        - journalId
+        - clientId
+        - emotion
+        - intensity
+        - timestamp
+      properties:
+        journalId:
+          type: string
+        clientId:
+          type: string
+        emotion:
+          type: string
+        intensity:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    # Therapist-Client Mapping Schema
+    therapist_mapping:
+      type: object
+      required:
+        - clientId
+        - therapistId
+      properties:
+        clientId:
+          type: string
+        therapistId:
+          type: string
+
+    # Session Schema
+    session_body:
+      type: object
+      required:
+        - therapistId
+        - clientId
+        - date
+      properties:
+        therapistId:
+          type: string
+        clientId:
+          type: string
+        date:
+          type: string
+          format: date-time
+        privateNotes:
+          type: string
+        sharedNotes:
+          type: string
+    session:
+      type: object
+      required:
+        - sessionId
+        - therapistId
+        - clientId
+        - date
+      properties:
+        sessionId:
+          type: string
+        therapistId:
+          type: string
+        clientId:
+          type: string
+        date:
+          type: string
+          format: date-time
+        privateNotes:
+          type: string
+        sharedNotes:
+          type: string
+
+    # Message Schema
+    message_body:
+      type: object
+      required:
+        - senderId
+        - receiverId
+        - message
+      properties:
+        senderId:
+          type: string
+        receiverId:
+          type: string
+        message:
+          type: string
+    message:
+      type: object
+      required:
+        - messageId
+        - senderId
+        - receiverId
+        - message
+        - timestamp
+      properties:
+        messageId:
+          type: string
+        senderId:
+          type: string
+        receiverId:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
