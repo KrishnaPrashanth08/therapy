@@ -9,7 +9,6 @@ servers:
   - url: http://localhost:5000
     description: Development Server
 paths:
-  # Authentication Endpoints
   /signup:
     post:
       summary: User Signup
@@ -29,6 +28,7 @@ paths:
                 $ref: '#/components/schemas/inline_response_200'
         "400":
           description: Invalid input
+
   /login:
     post:
       summary: User Login
@@ -51,7 +51,6 @@ paths:
         "400":
           description: Invalid input
 
-  # Clients Endpoints
   /clients:
     post:
       summary: Create a client profile
@@ -76,11 +75,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/client'
 
-  /clients/{clientId}:
+  /clients/{id}:
     get:
       summary: Retrieve a client’s profile
       parameters:
-        - name: clientId
+        - name: id
           in: path
           required: true
           schema:
@@ -91,7 +90,7 @@ paths:
     put:
       summary: Update a client’s profile
       parameters:
-        - name: clientId
+        - name: id
           in: path
           required: true
           schema:
@@ -108,7 +107,7 @@ paths:
     delete:
       summary: Delete a client’s profile
       parameters:
-        - name: clientId
+        - name: id
           in: path
           required: true
           schema:
@@ -117,7 +116,96 @@ paths:
         "204":
           description: Client profile deleted
 
-  # Therapists Endpoints
+  /clients/{id}/approve-access:
+    post:
+      summary: Approve or reject journal access requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                therapistId:
+                  type: string
+                status:
+                  type: string
+                  enum: [approved, rejected]
+        required: true
+      responses:
+        "200":
+          description: Journal access request handled
+
+  /clients/{id}/therapists-access:
+    get:
+      summary: View list of therapists with journal access
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of therapists with access
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /clients/{id}/journal-access-permissions:
+    patch:
+      summary: Manage journal access permissions for a client
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/journal_access_permissions_body'
+        required: true
+      responses:
+        "200":
+          description: Journal access permissions updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+
+  /clients/{id}/appointments:
+    post:
+      summary: Request appointments for available sessions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/appointment_request_body'
+        required: true
+      responses:
+        "201":
+          description: Appointment requested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_201'
+
   /therapists:
     post:
       summary: Create a therapist profile
@@ -142,11 +230,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/therapist'
 
-  /therapists/{therapistId}:
+  /therapists/{id}:
     get:
       summary: Retrieve a therapist’s profile
       parameters:
-        - name: therapistId
+        - name: id
           in: path
           required: true
           schema:
@@ -157,7 +245,7 @@ paths:
     put:
       summary: Update a therapist’s profile
       parameters:
-        - name: therapistId
+        - name: id
           in: path
           required: true
           schema:
@@ -174,7 +262,7 @@ paths:
     delete:
       summary: Delete a therapist’s profile
       parameters:
-        - name: therapistId
+        - name: id
           in: path
           required: true
           schema:
@@ -183,7 +271,83 @@ paths:
         "204":
           description: Therapist profile deleted
 
-  # Journals Endpoints
+  /therapists/{id}/request-access:
+    post:
+      summary: Request journal access from clients
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientId:
+                  type: string
+        required: true
+      responses:
+        "200":
+          description: Access request sent
+
+  /therapists/{id}/sessions:
+    post:
+      summary: Create available session slots
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/session_body'
+        required: true
+      responses:
+        "201":
+          description: Session slot created
+
+  /therapists/{id}/search:
+    get:
+      summary: Search across clients, notes, and journals
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search term
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clients:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/client'
+                  notes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/note'
+                  journals:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/journal_entry'
+
   /journals:
     post:
       summary: Add a new journal entry
@@ -208,12 +372,11 @@ paths:
                 items:
                   $ref: '#/components/schemas/journal_entry'
 
-  # Therapist-Client Mapping Endpoints
-  /clients/{clientId}/therapists:
-    post:
-      summary: Map a therapist to a client
+  /journals/{id}:
+    put:
+      summary: Update a journal entry
       parameters:
-        - name: clientId
+        - name: id
           in: path
           required: true
           schema:
@@ -222,13 +385,46 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/therapist_mapping'
+              $ref: '#/components/schemas/journal_entry_body'
         required: true
       responses:
         "200":
-          description: Mapping created
+          description: Journal entry updated
+    delete:
+      summary: Delete a journal entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Journal entry deleted
 
-  # Sessions Endpoints
+  /journals/{id}/access-permissions:
+    patch:
+      summary: Manage journal access permissions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/journal_access_permissions_body'
+        required: true
+      responses:
+        "200":
+          description: Journal access permissions updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+
   /sessions:
     post:
       summary: Create a new session
@@ -253,7 +449,25 @@ paths:
                 items:
                   $ref: '#/components/schemas/session'
 
-  # Messaging Endpoints
+  /sessions/search:
+    get:
+      summary: Search sessions by client or therapist
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/session'
+
   /messages:
     post:
       summary: Send a message (client or therapist)
@@ -278,9 +492,12 @@ paths:
                 items:
                   $ref: '#/components/schemas/message'
 
+
+
 components:
   schemas:
-    # Authentication Schemas
+  
+	 # Authentication Schemas
     signup_body:
       type: object
       required:
@@ -321,8 +538,9 @@ components:
           type: string
         token:
           type: string
-    
-    # Client Schema
+
+  
+    # Client Schemas
     client_body:
       type: object
       required:
@@ -337,11 +555,11 @@ components:
     client:
       type: object
       required:
-        - clientId
+        - id
         - email
         - name
       properties:
-        clientId:
+        id:
           type: string
         email:
           type: string
@@ -352,9 +570,9 @@ components:
           type: array
           items:
             type: string
-            description: Therapist IDs mapped to the client.
+            description: IDs mapped to the client.
 
-    # Therapist Schema
+    # Therapist Schemas
     therapist_body:
       type: object
       required:
@@ -369,140 +587,157 @@ components:
     therapist:
       type: object
       required:
-        - therapistId
+        - id
         - email
         - name
       properties:
-        therapistId:
+        id:
           type: string
         email:
           type: string
           format: email
         name:
           type: string
-        clients:
-          type: array
-          items:
-            type: string
-            description: Client IDs mapped to the therapist.
 
-    # Journal Entry Schema
-    journal_entry_body:
-      type: object
-      required:
-        - emotion
-        - intensity
-      properties:
-        emotion:
-          type: string
-        intensity:
-          type: integer
-          description: Intensity of the emotion, from 1 to 10.
-    journal_entry:
-      type: object
-      required:
-        - journalId
-        - clientId
-        - emotion
-        - intensity
-        - timestamp
-      properties:
-        journalId:
-          type: string
-        clientId:
-          type: string
-        emotion:
-          type: string
-        intensity:
-          type: integer
-        timestamp:
-          type: string
-          format: date-time
-
-    # Therapist-Client Mapping Schema
-    therapist_mapping:
-      type: object
-      required:
-        - clientId
-        - therapistId
-      properties:
-        clientId:
-          type: string
-        therapistId:
-          type: string
-
-    # Session Schema
+    # Session Schemas
     session_body:
       type: object
       required:
-        - therapistId
-        - clientId
         - date
+        - time
+        - therapistId
       properties:
-        therapistId:
-          type: string
-        clientId:
-          type: string
         date:
           type: string
-          format: date-time
-        privateNotes:
+          format: date
+        time:
           type: string
-        sharedNotes:
+          format: time
+        therapistId:
           type: string
     session:
       type: object
       required:
-        - sessionId
-        - therapistId
-        - clientId
+        - id
         - date
+        - time
+        - therapistId
       properties:
-        sessionId:
-          type: string
-        therapistId:
-          type: string
-        clientId:
+        id:
           type: string
         date:
           type: string
-          format: date-time
-        privateNotes:
+          format: date
+        time:
           type: string
-        sharedNotes:
+          format: time
+        therapistId:
           type: string
 
-    # Message Schema
+    # Journal Schemas
+    journal_entry_body:
+      type: object
+      required:
+        - title
+        - content
+        - clientId
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        clientId:
+          type: string
+    journal_entry:
+      type: object
+      required:
+        - id
+        - title
+        - content
+        - clientId
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        content:
+          type: string
+        clientId:
+          type: string
+
+    # Message Schemas
     message_body:
       type: object
       required:
         - senderId
-        - receiverId
-        - message
+        - recipientId
+        - content
       properties:
         senderId:
           type: string
-        receiverId:
+        recipientId:
           type: string
-        message:
+        content:
           type: string
     message:
       type: object
       required:
-        - messageId
+        - id
         - senderId
-        - receiverId
-        - message
-        - timestamp
+        - recipientId
+        - content
       properties:
-        messageId:
+        id:
           type: string
         senderId:
           type: string
-        receiverId:
+        recipientId:
           type: string
+        content:
+          type: string
+          
+          
+    journal_access_permissions_body:
+      type: object
+      required:
+        - therapistId
+        - accessLevel
+      properties:
+        therapistId:
+          type: string
+        accessLevel:
+          type: string
+          enum: [read, write, revoke]
+          description: Permission levels for accessing the journal.
+
+    appointment_request_body:
+      type: object
+      required:
+        - sessionId
+        - clientId
+      properties:
+        sessionId:
+          type: string
+          description: ID of the session being requested
+        clientId:
+          type: string
+          description: ID of the client requesting the appointment
+
+    inline_response_201:
+      type: object
+      properties:
         message:
           type: string
-        timestamp:
+        appointmentId:
+          type: string
+
+    note:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+        createdAt:
           type: string
           format: date-time
