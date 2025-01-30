@@ -9,7 +9,7 @@ servers:
   - url: http://localhost:5000
     description: Development Server
 paths:
-  # Authentication Endpoints 
+  # Authentication Endpoints (Unchanged)
   /signup:
     post:
       summary: User Signup
@@ -161,6 +161,61 @@ paths:
       responses:
         "200":
           description: Journal access request handled
+          
+  /clients/{id}/therapists-access:
+    get:
+      summary: View list of therapists with journal access
+      description: Retrieve a list of therapists who have access to a client’s journal.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the client whose journal access is being queried.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of therapists with access
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "400":
+          description: Invalid client ID
+        "500":
+          description: Internal server error
+
+  /clients/{id}/journal-access-permissions:
+    patch:
+      summary: Manage journal access permissions for a client
+      description: Update the permissions for therapists who have access to the client’s journal.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the client whose journal access permissions are being updated.
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/journal_access_permissions_body'
+        required: true
+      responses:
+        "200":
+          description: Journal access permissions updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        "400":
+          description: Invalid request data
+        "500":
+          description: Internal server error
+
 
   /clients/{id}/appointments:
     post:
@@ -282,6 +337,37 @@ paths:
       responses:
         "204":
           description: Therapist profile deleted
+          
+  /therapists/{id}/request-access:
+    post:
+      summary: Request journal access from clients
+      description: Therapist can request access to a client’s journal.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the therapist requesting access
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                clientId:
+                  type: string
+                  description: The ID of the client whose journal access is being requested
+              required:
+                - clientId
+        required: true
+      responses:
+        "200":
+          description: Access request sent successfully
+        "400":
+          description: Invalid request data (e.g., missing clientId)
+        "500":
+          description: Internal server error
 
   /therapists/{id}/appointments:
     get:
@@ -598,7 +684,7 @@ paths:
 
 components:
   schemas:
-    # Authentication Schemas 
+    # Authentication Schemas (Unchanged)
     signup_body:
       type: object
       required:
@@ -703,6 +789,19 @@ components:
           items:
             type: string
             description: IDs of clients mapped to the therapist.
+            
+    journal_access_permissions_body:
+      type: object
+      properties:
+        therapists:
+          type: array
+          items:
+            type: string
+          description: List of therapist IDs with journal access permissions for the client.
+      required:
+        - therapists
+
+
 
     # Session Schemas
     session_body:
