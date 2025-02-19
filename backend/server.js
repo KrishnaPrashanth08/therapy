@@ -290,7 +290,7 @@ app.post('/clients/:id/appointments', async (req, res) => {
 });
 
 //ENDPOINT FOR CLIENT TO EDIT JOURNAL ACCESS PERMISSION
-app.patch('/clients/:id/journal-access-permissions', async (req, res) => {
+app.put('/clients/:id/journal-access-permissions', async (req, res) => {
   const clientId = req.params.id;
   const { therapists } = req.body;
 
@@ -299,18 +299,15 @@ app.patch('/clients/:id/journal-access-permissions', async (req, res) => {
   }
 
   try {
-    
     const client = await getTherapyData({ id: clientId });
     if (!client || client.type !== 'client') {
       return res.status(404).json({ message: 'Client not found.' });
     }
 
-    
     const updateExpression = 'SET journalAccessPermissions = :permissions';
     const expressionValues = {
       ':permissions': therapists
     };
-
     const updatedClient = await updateTherapyData(
       { id: clientId },
       updateExpression,
@@ -350,63 +347,98 @@ app.get('/therapists/:id', async (req, res) => {
 // Therapists endpoint --- done
 app.post('/therapists', async (req, res) => {
   try {
-    const therapist = { ...req.body, type: 'therapist', id: `therapist-${Date.now()}` };
+    const { email, name, location, expertise } = req.body;
+    
+    if (!email || !name) {
+      return res.status(400).json({ message: 'Email and name are required.' });
+    }
+
+    const therapist = {
+      id: `therapist-${Date.now()}`,
+      type: 'therapist',
+      email,
+      name,
+      location,
+      expertise,
+      mappedClients: []
+    };
+
     await addTherapyData(therapist);
     res.status(201).json({ message: 'Therapist added successfully', therapist });
   } catch (error) {
-    res.status(500).json({ message: 'Error adding therapist', error });
+    console.error('Error adding therapist:', error);
+    res.status(500).json({ message: 'Error adding therapist', error: error.message });
   }
 });
 
-// Get all therapists --- done
+// get all therapists
 app.get('/therapists', async (req, res) => {
   try {
-    const theraspists = await scanTherapists();
-    console.log(theraspists); 
-    res.status(200).json(theraspists); 
+    const { location, expertise } = req.query;
+    
+    let filterExpression = '#type = :therapistType';
+    let expressionAttributeNames = { '#type': 'type' };
+    let expressionAttributeValues = { ':therapistType': 'therapist' };
+
+    if (location) {
+      filterExpression += ' AND contains(#location, :location)';
+      expressionAttributeNames['#location'] = 'location';
+      expressionAttributeValues[':location'] = location;
+    }
+
+    if (expertise) {
+      filterExpression += ' AND contains(#expertise, :expertise)';
+      expressionAttributeNames['#expertise'] = 'expertise';
+      expressionAttributeValues[':expertise'] = expertise;
+    }
+
+    const params = {
+      TableName: TABLE_NAME_2,
+      FilterExpression: filterExpression,
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues
+    };
+
+    const data = await dynamodb.scan(params).promise();
+    res.status(200).json(data.Items);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching theraspists', error });
+    console.error('Error fetching therapists:', error);
+    res.status(500).json({ message: 'Error fetching therapists', error });
   }
 });
+
 
 // Endpoint for therapist to update by ID
 app.put('/therapists/:id', async (req, res) => {
-  const { id } = req.params; 
-  const updateData = req.body; 
-
+  const { id } = req.params;
+  const updateData = req.body;
   if (!id || Object.keys(updateData).length === 0) {
     return res.status(400).json({ error: 'Invalid request. ID and update data are required.' });
   }
-
   try {
-   
     const updateExpressionParts = [];
     const expressionValues = {};
-    const expressionAttributeNames = {}; 
-
+    const expressionAttributeNames = {};
     for (const key in updateData) {
-      
       const attributePlaceholder = `#${key}`;
       const valuePlaceholder = `:${key}`;
-
       updateExpressionParts.push(`${attributePlaceholder} = ${valuePlaceholder}`);
       expressionValues[valuePlaceholder] = updateData[key];
-      expressionAttributeNames[attributePlaceholder] = key; 
+      expressionAttributeNames[attributePlaceholder] = key;
     }
-
     const updateExpression = `SET ${updateExpressionParts.join(', ')}`;
     const updatedTherapist = await updateTherapyData(
-      { id }, 
+      { id },
       updateExpression,
       expressionValues,
       expressionAttributeNames
     );
-
     res.json({ message: 'Therapist updated successfully', updatedTherapist });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
 //endpoint for deleting a therapist by id
 app.delete('/therapists/:id', async (req, res) => {
   const { id } = req.params;
@@ -671,48 +703,23 @@ app.delete('/messages/:id', async (req, res) => {
 // POST /journals - Create journal entry with emotional tracking
 app.post('/journals', async (req, res) => {
   try {
-    const { userType, userId, content, emotion, intensity, tags, sessionId, noteType } = req.body;
-    
-    
-    if (!userType || !userId || !content) {
+    const { time, feeling, intensity, clientId } = req.body;
+    if (!time || !feeling || intensity === undefined || !clientId) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-   
-    if (userType === 'client') {
-      if (!emotion || intensity === undefined) {
-        return res.status(400).json({ message: 'Emotion and intensity required for clients' });
-      }
-      if (intensity < 1 || intensity > 10) {
-        return res.status(400).json({ message: 'Intensity must be between 1-10' });
-      }
-    }
-
-   
-    if (userType === 'therapist') {
-      if (!sessionId || !['private', 'shared'].includes(noteType)) {
-        return res.status(400).json({ message: 'Therapist notes require valid sessionId and noteType' });
-      }
+    if (intensity < 1 || intensity > 10) {
+      return res.status(400).json({ message: 'Intensity must be between 1-10' });
     }
 
     const journalEntry = {
       id: `journal-${Date.now()}`,
       type: 'journal',
-      userType,
-      userId,
-      content,
+      time,
+      feeling: feeling.toLowerCase(),
+      intensity: parseInt(intensity),
+      clientId,
       createdAt: new Date().toISOString(),
-      ...(userType === 'client' && {
-        emotion: emotion.toLowerCase(),
-        intensity: parseInt(intensity),
-        tags: tags || [],
-        lastUpdated: new Date().toISOString()
-      }),
-      ...(userType === 'therapist' && {
-        sessionId,
-        noteType,
-        relatedClient: req.body.clientId
-      })
     };
 
     await addTherapyData(journalEntry);
@@ -722,50 +729,30 @@ app.post('/journals', async (req, res) => {
   }
 });
 
+
 // GET /journals - Filter by type and user
 app.get('/journals', async (req, res) => {
   try {
-    const { userType, userId, sessionId } = req.query;
-    
-    // Base filter
+    const { clientId } = req.query;
+    if (!clientId) {
+      return res.status(400).json({ message: 'clientId query parameter is required' });
+    }
+
     const params = {
       TableName: 'therapy-data',
-      FilterExpression: '#type = :type',
+      FilterExpression: '#type = :type AND clientId = :clientId',
       ExpressionAttributeNames: { '#type': 'type' },
-      ExpressionAttributeValues: { ':type': 'journal' }
+      ExpressionAttributeValues: { ':type': 'journal', ':clientId': clientId }
     };
 
-    // Add user filters
-    if (userType && userId) {
-      params.FilterExpression += ' AND userType = :ut AND userId = :uid';
-      params.ExpressionAttributeValues[':ut'] = userType;
-      params.ExpressionAttributeValues[':uid'] = userId;
-    }
-
-    // Add session filter for therapist notes
-    if (sessionId) {
-      params.FilterExpression += ' AND sessionId = :sid';
-      params.ExpressionAttributeValues[':sid'] = sessionId;
-    }
-
     const data = await dynamodb.scan(params).promise();
-    
-    // Format response
     const formatted = data.Items.map(item => ({
       id: item.id,
-      type: item.userType, 
-      content: item.content,
-      createdAt: item.createdAt,
-      ...(item.userType === 'client' && {
-        emotion: item.emotion,
-        intensity: item.intensity,
-        tags: item.tags
-      }),
-      ...(item.userType === 'therapist' && {
-        sessionId: item.sessionId,
-        noteType: item.noteType,
-        clientId: item.relatedClient
-      })
+      time: item.time,
+      feeling: item.feeling,
+      intensity: item.intensity,
+      clientId: item.clientId,
+      createdAt: item.createdAt
     }));
 
     res.status(200).json(formatted);
@@ -774,30 +761,22 @@ app.get('/journals', async (req, res) => {
   }
 });
 
+
 // GET /journals/{id} - Get specific entry
 app.get('/journals/:id', async (req, res) => {
   try {
     const journal = await getTherapyData({ id: req.params.id });
-    
     if (!journal || journal.type !== 'journal') {
       return res.status(404).json({ message: 'Journal not found' });
     }
-    
-    
+
     const response = {
       id: journal.id,
-      content: journal.content,
-      createdAt: journal.createdAt,
-      ...(journal.userType === 'client' && {
-        emotion: journal.emotion,
-        intensity: journal.intensity,
-        tags: journal.tags
-      }),
-      ...(journal.userType === 'therapist' && {
-        sessionId: journal.sessionId,
-        noteType: journal.noteType,
-        clientId: journal.relatedClient
-      })
+      time: journal.time,
+      feeling: journal.feeling,
+      intensity: journal.intensity,
+      clientId: journal.clientId,
+      createdAt: journal.createdAt
     };
 
     res.status(200).json(response);
@@ -806,36 +785,33 @@ app.get('/journals/:id', async (req, res) => {
   }
 });
 
+
 // PUT /journals/{id} - Update entry
 app.put('/journals/:id', async (req, res) => {
   try {
     const journal = await getTherapyData({ id: req.params.id });
-    
     if (!journal || journal.type !== 'journal') {
       return res.status(404).json({ message: 'Journal not found' });
     }
 
-    
-    const allowedUpdates = {
-      client: ['content', 'emotion', 'intensity', 'tags'],
-      therapist: ['content', 'noteType']
-    };
-    
+    const allowedUpdates = ['time', 'feeling', 'intensity'];
     const invalidUpdates = Object.keys(req.body).filter(
-      key => !allowedUpdates[journal.userType].includes(key)
+      key => !allowedUpdates.includes(key)
     );
-
     if (invalidUpdates.length > 0) {
       return res.status(400).json({
-        message: `Invalid updates for ${journal.userType} journal: ${invalidUpdates.join(', ')}`
+        message: `Invalid updates: ${invalidUpdates.join(', ')}`
       });
     }
 
-  
+    if (req.body.intensity && (req.body.intensity < 1 || req.body.intensity > 10)) {
+      return res.status(400).json({ message: 'Intensity must be between 1-10' });
+    }
+
     const updateResult = await updateTherapyData(
       { id: req.params.id },
       'SET ' + Object.keys(req.body).map(k => `#${k} = :${k}`).join(', '),
-      Object.fromEntries(Object.entries(req.body).map(([k,v]) => [`:${k}`, v])),
+      Object.fromEntries(Object.entries(req.body).map(([k,v]) => [`:${k}`, k === 'intensity' ? parseInt(v) : v])),
       Object.fromEntries(Object.keys(req.body).map(k => [`#${k}`, k]))
     );
 
@@ -844,6 +820,7 @@ app.put('/journals/:id', async (req, res) => {
     res.status(500).json({ message: 'Error updating journal', error: error.message });
   }
 });
+
 
 // DELETE /journals/{id}
 app.delete('/journals/:id', async (req, res) => {
@@ -864,20 +841,19 @@ app.delete('/journals/:id', async (req, res) => {
 //SESSIONS ENDPOINTS
 //POST A SESSION 
 app.post('/sessions', async (req, res) => {
-  const { date, time, therapistId, clientId, privateNotes, sharedNotes } = req.body;
+  const { date, startTime, endTime, therapistId, clientId, privateNotes, sharedNotes } = req.body;
 
-  
-  if (!date || !time || !therapistId || !clientId) {
-    return res.status(400).json({ message: 'Date, time, therapistId, and clientId are required.' });
+  if (!date || !startTime || !endTime || !therapistId || !clientId) {
+    return res.status(400).json({ message: 'Date, startTime, endTime, therapistId, and clientId are required.' });
   }
 
   try {
-    
     const session = {
       id: `session-${Date.now()}`,
       type: 'session',
       date,
-      time,
+      startTime,
+      endTime,
       therapistId,
       clientId,
       privateNotes: privateNotes || '',
@@ -885,9 +861,7 @@ app.post('/sessions', async (req, res) => {
       status: 'scheduled'
     };
 
-    
     await addTherapyData(session);
-
     res.status(201).json({ message: 'Session created successfully', session });
   } catch (error) {
     console.error('Error creating session:', error);
@@ -895,16 +869,23 @@ app.post('/sessions', async (req, res) => {
   }
 });
 
+
 //get all sessions
 app.get('/sessions', async (req, res) => {
   try {
     const sessions = await scanSessions();
-    res.status(200).json(sessions);
+    const formattedSessions = sessions.map(session => ({
+      ...session,
+      startTime: session.startTime,
+      endTime: session.endTime
+    }));
+    res.status(200).json(formattedSessions);
   } catch (error) {
     console.error('Error fetching sessions:', error);
     res.status(500).json({ message: 'Error fetching sessions', error: error.message });
   }
 });
+
 
 // Get single session by ID
 app.get('/sessions/:id', async (req, res) => {
@@ -915,11 +896,18 @@ app.get('/sessions/:id', async (req, res) => {
       return res.status(404).json({ message: 'Session not found' });
     }
     
-    res.status(200).json(session);
+    const formattedSession = {
+      ...session,
+      startTime: session.startTime,
+      endTime: session.endTime
+    };
+    
+    res.status(200).json(formattedSession);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching session', error });
   }
 });
+
 
 // Update session endpoint
 app.put('/sessions/:id', async (req, res) => {
@@ -930,18 +918,27 @@ app.put('/sessions/:id', async (req, res) => {
       return res.status(404).json({ message: 'Session not found' });
     }
 
-   
+    const { date, startTime, endTime, therapistId, clientId, privateNotes, sharedNotes } = req.body;
+    
     const updateExpressionParts = [];
     const expressionValues = {};
     const expressionAttributeNames = {};
 
-    for (const key in req.body) {
-      const attrPlaceholder = `#${key}`;
-      const valuePlaceholder = `:${key}`;
-      
-      updateExpressionParts.push(`${attrPlaceholder} = ${valuePlaceholder}`);
-      expressionAttributeNames[attrPlaceholder] = key;
-      expressionValues[valuePlaceholder] = req.body[key];
+    const updateFields = { date, startTime, endTime, therapistId, clientId, privateNotes, sharedNotes };
+
+    for (const [key, value] of Object.entries(updateFields)) {
+      if (value !== undefined) {
+        const attrPlaceholder = `#${key}`;
+        const valuePlaceholder = `:${key}`;
+        
+        updateExpressionParts.push(`${attrPlaceholder} = ${valuePlaceholder}`);
+        expressionAttributeNames[attrPlaceholder] = key;
+        expressionValues[valuePlaceholder] = value;
+      }
+    }
+
+    if (updateExpressionParts.length === 0) {
+      return res.status(400).json({ message: 'No valid fields to update' });
     }
 
     const updatedSession = await updateTherapyData(
@@ -953,9 +950,10 @@ app.put('/sessions/:id', async (req, res) => {
 
     res.status(200).json(updatedSession);
   } catch (error) {
-    res.status(500).json({ message: 'Error updating session' });
+    res.status(500).json({ message: 'Error updating session', error: error.message });
   }
 });
+
 
 // Delete session endpoint
 app.delete('/sessions/:id', async (req, res) => {
@@ -972,6 +970,111 @@ app.delete('/sessions/:id', async (req, res) => {
     res.status(500).json({ message: 'Error deleting session' });
   }
 });
+
+// POST /therapists/{therapistId}/mapping-requests
+app.post('/therapists/:therapistId/mapping-requests', async (req, res) => {
+  const { therapistId } = req.params;
+  const { clientId } = req.body;
+
+  try {
+    const therapist = await getTherapyData({ id: therapistId });
+    const client = await getTherapyData({ id: clientId });
+
+    if (!therapist || therapist.type !== 'therapist' || !client || client.type !== 'client') {
+      return res.status(404).json({ message: 'Therapist or client not found.' });
+    }
+
+    const updateExpression = 'SET mappingRequests = list_append(if_not_exists(mappingRequests, :emptyList), :newRequest)';
+    const expressionValues = {
+      ':emptyList': [],
+      ':newRequest': [clientId]
+    };
+
+    await updateTherapyData({ id: therapistId }, updateExpression, expressionValues);
+
+    res.status(200).json({ message: 'Mapping request sent successfully.' });
+  } catch (error) {
+    console.error('Error sending mapping request:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// PATCH /clients/{clientId}/mapping-requests/{therapistId}
+app.patch('/clients/:clientId/mapping-requests/:therapistId', async (req, res) => {
+  const { clientId, therapistId } = req.params;
+  const { status } = req.body; // 'accepted' or 'rejected'
+
+  try {
+    const client = await getTherapyData({ id: clientId });
+    const therapist = await getTherapyData({ id: therapistId });
+
+    if (!client || client.type !== 'client' || !therapist || therapist.type !== 'therapist') {
+      return res.status(404).json({ message: 'Client or therapist not found.' });
+    }
+
+    if (status === 'accepted') {
+      // Update client's mappedTherapists
+      await updateTherapyData(
+        { id: clientId },
+        'SET mappedTherapists = list_append(if_not_exists(mappedTherapists, :emptyList), :newTherapist)',
+        { ':emptyList': [], ':newTherapist': [therapistId] }
+      );
+
+      // Update therapist's mappedClients
+      await updateTherapyData(
+        { id: therapistId },
+        'SET mappedClients = list_append(if_not_exists(mappedClients, :emptyList), :newClient)',
+        { ':emptyList': [], ':newClient': [clientId] }
+      );
+    }
+
+    // Remove the mapping request
+    await updateTherapyData(
+      { id: therapistId },
+      'SET mappingRequests = list_remove(mappingRequests, :clientId)',
+      { ':clientId': clientId }
+    );
+
+    res.status(200).json({ message: `Mapping request ${status}.` });
+  } catch (error) {
+    console.error('Error updating mapping request:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// DELETE /clients/{clientId}/mapped-therapists/{therapistId}
+app.delete('/clients/:clientId/mapped-therapists/:therapistId', async (req, res) => {
+  const { clientId, therapistId } = req.params;
+
+  try {
+    const client = await getTherapyData({ id: clientId });
+    const therapist = await getTherapyData({ id: therapistId });
+
+    if (!client || client.type !== 'client' || !therapist || therapist.type !== 'therapist') {
+      return res.status(404).json({ message: 'Client or therapist not found.' });
+    }
+
+    // Remove therapist from client's mappedTherapists
+    await updateTherapyData(
+      { id: clientId },
+      'SET mappedTherapists = list_remove(mappedTherapists, :therapistId)',
+      { ':therapistId': therapistId }
+    );
+
+    // Remove client from therapist's mappedClients
+    await updateTherapyData(
+      { id: therapistId },
+      'SET mappedClients = list_remove(mappedClients, :clientId)',
+      { ':clientId': clientId }
+    );
+
+    res.status(200).json({ message: 'Mapping removed successfully.' });
+  } catch (error) {
+    console.error('Error removing mapping:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
 
 app.use(express.static(path.join(__dirname, '../therapy-app/dist')));
 
