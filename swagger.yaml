@@ -413,7 +413,7 @@ paths:
         "204":
           description: Journal entry deleted
 
-  /session/{therapistId}:
+  /session-slots/{therapistId}:
     post:
       summary: Create available session slots (Therapist)
       parameters:
@@ -427,10 +427,103 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/session_body'
+              $ref: '#/components/schemas/session_slot_body'
       responses:
         "201":
           description: Session slot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/session_slot'
+                
+    get:
+      summary: List available session slots for a therapist
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of available session slots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/session_slot'
+
+  /session-slots/{therapistId}/appointments:
+    post:
+      summary: Request an appointment for an available session slot
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/appointment_request_body'
+      responses:
+        "201":
+          description: Appointment requested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/appointment_request'
+
+                
+  /session/{therapistId}/appointments:
+    get:
+      summary: List pending appointment requests
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of pending appointment requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/appointment_request'
+
+  /session/{therapistId}/appointments/{appointmentId}:
+    put:
+      summary: Approve or reject an appointment request
+      parameters:
+        - name: therapistId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected]
+      responses:
+        "200":
+          description: Appointment request updated
           content:
             application/json:
               schema:
@@ -500,79 +593,6 @@ paths:
         "204":
           description: Session deleted
 
-  /session/{therapistId}/appointments:
-    get:
-      summary: List pending appointment requests
-      parameters:
-        - name: therapistId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: List of pending appointment requests
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/appointment_request'
-
-  /session/{therapistId}/appointments/{appointmentId}:
-    put:
-      summary: Approve or reject an appointment request
-      parameters:
-        - name: therapistId
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: appointmentId
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                status:
-                  type: string
-                  enum: [approved, rejected]
-      responses:
-        "200":
-          description: Appointment request updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/appointment_request'
-
-  /session/{clientId}/appointments:
-    post:
-      summary: Request appointments for available sessions
-      parameters:
-        - name: clientId
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/appointment_request_body'
-      responses:
-        "201":
-          description: Appointment requested successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/inline_response_200_1'
 
   /therapists:
     post:
@@ -974,7 +994,7 @@ components:
         expertise:
           type: string
           description: Therapist's area of expertise
-        mappedClientsIds:
+        mappedClients:
           type: array
           items:
             type: string
@@ -1054,6 +1074,59 @@ components:
           type: string
         sharedNotes:
           type: string
+          
+    session_slot_body:
+      type: object
+      required:
+        - date
+        - startTime
+        - endTime
+        - therapistId
+      properties:
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+          format: time
+          description: The time the session slot begins
+        endTime:
+          type: string
+          format: time
+          description: The time the session slot ends
+        therapistId:
+          type: string
+        status:
+          type: string
+          enum: [available, booked]
+          default: available
+
+          
+    session_slot:
+      type: object
+      required:
+        - slotId
+        - date
+        - startTime
+        - endTime
+        - therapistId
+      properties:
+        slotId:
+          type: string
+        date:
+          type: string
+          format: date
+        startTime:
+          type: string
+          format: time
+        endTime:
+          type: string
+          format: time
+        therapistId:
+          type: string
+        status:
+          type: string
+          enum: [available, booked]
 
     journal_entry_body:
       type: object
@@ -1133,12 +1206,12 @@ components:
     appointment_request_body:
       type: object
       required:
-        - sessionId
+        - slotId
         - clientId
       properties:
-        sessionId:
+        slotId:
           type: string
-          description: ID of the session being requested
+          description: ID of the slot being requested
         clientId:
           type: string
           description: ID of the client requesting the appointment
@@ -1148,7 +1221,7 @@ components:
       properties:
         appointmentRequestId:
           type: string
-        sessionId:
+        slotId:
           type: string
         clientId:
           type: string
