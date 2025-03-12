@@ -36,7 +36,7 @@ Before starting the project, ensure you have the following installed:
 
 Node.js
 
-AWS CLI (configured with your credentials)
+AWS CLI 
 
 DynamoDB tables set up as per the schema
 
@@ -54,7 +54,7 @@ text
 PORT=5000
 JWT_SECRET=your_jwt_secret_key
 AWS_REGION=your_aws_region
-DYNAMODB_ENDPOINT=your_dynamodb_endpoint (optional, if using local DynamoDB)
+DYNAMODB_ENDPOINT=your_dynamodb_endpoint 
 Set Up DynamoDB Tables
 Ensure you have created the required DynamoDB tables based on the schema provided in the documentation.
 
@@ -170,8 +170,6 @@ GET /messages: Retrieve message history between client and therapist.
 
 Security Features
 Passwords are securely hashed using bcrypt before storage in the database.
-
-JWT tokens are used to authenticate API requests securely.
 
 CORS is enabled to allow secure cross-origin API calls.
 
