@@ -5,7 +5,14 @@ const swaggerUi = require('swagger-ui-express');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { addItem, getItem, addTherapyData, getTherapyData,scanClients, scanTherapists,scanSessions,updateTherapyData,deleteTherapyData ,scanJournalAccessRequests ,scanTherapistsWithAccess,scanAppointmentRequests} = require('./dynamodb-operations'); // Import functions for new table and existing ones
+const { addItem, getItem,scanJournalAccessRequests ,
+        addClient,getClient,updateClient,deleteClient,scanClients,addTherapist,getTherapist,updateTherapist,
+        deleteTherapist,scanTherapists,addSessionSlot,getSessionSlot,updateSessionSlot,deleteSessionSlot,scanSessionSlots,
+        addAppointmentRequest,getAppointmentRequest,updateAppointmentRequest,deleteAppointmentRequest,scanAppointmentRequests,
+        addSession,getSession,updateSession,deleteSession,scanSessions,scanAppointmentRequestsByTherapistId,addJournalEntry,getJournalEntry,
+        updateJournalEntry,deleteJournalEntry,scanJournalEntries,addJournalAccessRequest,getJournalAccessRequest,updateJournalAccessRequest,deleteJournalAccessRequest,
+        updateJournalAccessPermissions,getTherapistsWithJournalAccess,addMessage,getMessage,updateMessage,deleteMessage,scanMessages,
+        addMappingRequest,updateMappingRequest,deleteMappedTherapist,addMappedTherapist,getMappingRequest,searchTherapists,searchClients, searchJournals,searchMessages,} = require('./dynamodb-operations'); // Import functions for new table and existing ones
 const cors = require('cors');
 
 const swaggerDocument = yamljs.load('./swagger.yaml');
@@ -91,8 +98,8 @@ app.post('/login', async (req, res) => {
 // Clients endpoint ---- done
 app.post('/clients', async (req, res) => {
   try {
-    const client = { ...req.body, type: 'client', id: `client-${Date.now()}` };
-    await addTherapyData(client);
+    const client = { ...req.body, ClientId: `client-${Date.now()}` };
+    await addClient(client);
     res.status(201).json({ message: 'Client added successfully', client });
   } catch (error) {
     res.status(500).json({ message: 'Error adding client', error });
@@ -112,55 +119,43 @@ app.get('/clients', async (req, res) => {
 });
 
 // Endpoint to get a client by ID
-app.get('/clients/:id', async (req, res) => {
-  const clientId = req.params.id; 
+app.get('/clients/:ClientId', async (req, res) => {
+  const clientId = req.params.ClientId; 
 
   try {
-   
-    const key = { id: clientId }; 
-    const clientData = await getTherapyData(key);
-
-    if (!clientData || clientData.type !== 'client') {
+    const client = await getClient({ ClientId: clientId });
+    if (!client) {
       return res.status(404).json({ message: 'Client not found' });
     }
-
-    res.status(200).json(clientData); 
+    res.status(200).json(client);
   } catch (error) {
-    console.error('Error fetching client data:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: 'Error fetching client', error });
   }
 });
 
-//endpoint for client to update by id
-app.put('/clients/:id', async (req, res) => {
-  const { id } = req.params; 
-  const updateData = req.body; 
-
-  if (!id || Object.keys(updateData).length === 0) {
+// PUT /clients/:id - Update a client's profile
+app.put('/clients/:ClientId', async (req, res) => {
+  const clientId = req.params.ClientId;
+  const updateData = req.body;
+  if (!clientId || Object.keys(updateData).length === 0) {
     return res.status(400).json({ error: 'Invalid request. ID and update data are required.' });
   }
-
   try {
-    
     const updateExpressionParts = [];
     const expressionValues = {};
-    const expressionAttributeNames = {}; 
+    const expressionAttributeNames = {};
 
     for (const key in updateData) {
-      
       const attributePlaceholder = `#${key}`;
       const valuePlaceholder = `:${key}`;
-
       updateExpressionParts.push(`${attributePlaceholder} = ${valuePlaceholder}`);
       expressionValues[valuePlaceholder] = updateData[key];
-      expressionAttributeNames[attributePlaceholder] = key; 
+      expressionAttributeNames[attributePlaceholder] = key;
     }
 
     const updateExpression = `SET ${updateExpressionParts.join(', ')}`;
-
-    
-    const updatedClient = await updateTherapyData(
-      { id }, 
+    const updatedClient = await updateClient(
+      { ClientId: clientId },
       updateExpression,
       expressionValues,
       expressionAttributeNames
@@ -172,253 +167,294 @@ app.put('/clients/:id', async (req, res) => {
   }
 });
 
-//endpoint for deleting a client by id
-app.delete('/clients/:id', async (req, res) => {
-  const { id } = req.params;
-
+// DELETE /clients/:id - Delete a client's profile
+app.delete('/clients/:ClientId', async (req, res) => {
+  const clientId = req.params.ClientId;
   try {
-    
-    const key = { id }; 
-    await deleteTherapyData(key); 
-
-    res.status(200).send({ message: `Client with ID ${id} deleted successfully.` });
+    await deleteClient({ ClientId: clientId });
+    res.status(204).send({ message: `Client with ID ${ClientId} deleted successfully.` });
   } catch (error) {
-    console.error('Error deleting client profile:', error);
     res.status(500).send({ error: 'Failed to delete client profile.' });
   }
 });
 
-//enpoint for clients to check therapist requests 
-app.get('/clients/:id/journal-access-requests', async (req, res) => {
+//search endpoint for client
+app.get('/clients/:clientId/search', async (req, res) => {
   try {
-    const requests = await scanJournalAccessRequests(req.params.id);
-    res.status(200).json(requests);
-  } catch (error) {
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
+    const clientId = req.params.clientId;
+    const { keyword } = req.query;
 
-//endpoint foe clients  to accepting or rejecting request
-app.post('/clients/:id/approve-access', async (req, res) => {
-  const clientId = req.params.id;
-  const { requestId, action } = req.body;
-
-  if (!clientId || !requestId || !action) {
-    return res.status(400).json({ message: 'Client ID, request ID, and action are required.' });
-  }
-
-  if (action !== 'approve' && action !== 'reject') {
-    return res.status(400).json({ message: 'Invalid action. Must be "approve" or "reject".' });
-  }
-
-  try {
-    
-    const request = await getTherapyData({ id: requestId });
-
-    if (!request || request.type !== 'journal_access_request' || request.clientId !== clientId) {
-      return res.status(404).json({ message: 'Journal access request not found.' });
+    if (!keyword) {
+      return res.status(400).json({ message: 'Keyword is required for search' });
     }
 
-   
-    const updateExpression = 'SET #status = :status';
-    const expressionValues = {
-      ':status': action === 'approve' ? 'approved' : 'rejected'
-    };
-    const expressionAttributeNames = {
-      '#status': 'status'
-    };
-
-    const updatedRequest = await updateTherapyData(
-      { id: requestId },
-      updateExpression,
-      expressionValues,
-      expressionAttributeNames
-    );
-
-    res.status(200).json({ 
-      message: `Journal access request ${action}d successfully`, 
-      updatedRequest 
-    });
-  } catch (error) {
-    console.error('Error processing journal access request:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-// endpoint for a client to see who has acces to journals
-app.get('/clients/:id/therapists-access', async (req, res) => {
-  try {
-    const requests = await scanTherapistsWithAccess(req.params.id);
-    res.status(200).json(requests);
-  } catch (error) {
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-//endpoint for clients to request for appointments based on sessionsId
-app.post('/clients/:id/appointments', async (req, res) => {
-  const clientId = req.params.id;
-  const { sessionId } = req.body;
-
-  if (!clientId || !sessionId) {
-    return res.status(400).json({ message: 'Client ID and Session ID are required' });
-  }
-
-  try {
-    
-    const session = await getTherapyData({ id: sessionId });
-    
-    if (!session || session.type !== 'session') {
-      return res.status(404).json({ message: 'Session not found' });
-    }
-
-    const request = {
-      id: `appreq-${Date.now()}`,
-      type: 'appointment_request',
-      clientId,
-      sessionId,
-      therapistId: session.therapistId, 
-      status: 'pending',
-      requestedAt: new Date().toISOString()
-    };
-
-    await addTherapyData(request);
-    res.status(201).json({ message: 'Appointment request submitted', request });
-  } catch (error) {
-    console.error('Error submitting appointment request:', error);
-    res.status(500).json({ message: 'Request failed', error: error.message });
-  }
-});
-
-//ENDPOINT FOR CLIENT TO EDIT JOURNAL ACCESS PERMISSION
-app.put('/clients/:id/journal-access-permissions', async (req, res) => {
-  const clientId = req.params.id;
-  const { therapists } = req.body;
-
-  if (!clientId || !Array.isArray(therapists)) {
-    return res.status(400).json({ message: 'Client ID and therapists array are required.' });
-  }
-
-  try {
-    const client = await getTherapyData({ id: clientId });
-    if (!client || client.type !== 'client') {
-      return res.status(404).json({ message: 'Client not found.' });
-    }
-
-    const updateExpression = 'SET journalAccessPermissions = :permissions';
-    const expressionValues = {
-      ':permissions': therapists
-    };
-    const updatedClient = await updateTherapyData(
-      { id: clientId },
-      updateExpression,
-      expressionValues
-    );
+    // Search therapists' notes, journals, locations, and expertise
+    const therapists = await searchTherapists(keyword);
+    const journals = await searchJournals(keyword, 'therapist');
+    const messages = await searchMessages(clientId, keyword);
 
     res.status(200).json({
-      message: 'Journal access permissions updated successfully',
-      updatedPermissions: updatedClient.journalAccessPermissions
+      clientId,
+      results: {
+        therapists,
+        journals,
+        messages,
+      },
     });
   } catch (error) {
-    console.error('Error updating journal access permissions:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Error performing search:', error);
+    res.status(500).json({ message: 'Error performing search', error: error.message });
   }
 });
 
-// Endpoint to get a therapist by ID
-app.get('/therapists/:id', async (req, res) => {
-  const therapistId = req.params.id; 
 
+//journal  related entry points
+// POST /journal/{therapistId}/request-access
+app.post('/journal/:therapistId/request-access', async (req, res) => {
   try {
-    const key = { id: therapistId }; 
-    const therapistData = await getTherapyData(key);
+    const TherapistId = req.params.therapistId;
+    const { ClientId } = req.body;
 
-    
-    if (!therapistData || therapistData.type !== "therapist") {
-      return res.status(404).json({ message: 'Therapist not found' }); 
-    }
-
-    res.status(200).json(therapistData); 
-  } catch (error) {
-    console.error('Error fetching therapist data:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-// Therapists endpoint --- done
-app.post('/therapists', async (req, res) => {
-  try {
-    const { email, name, location, expertise } = req.body;
-    
-    if (!email || !name) {
-      return res.status(400).json({ message: 'Email and name are required.' });
-    }
-
-    const therapist = {
-      id: `therapist-${Date.now()}`,
-      type: 'therapist',
-      email,
-      name,
-      location,
-      expertise,
-      mappedClients: []
+    const request = {
+      JournalAccessRequestId: `request-${Date.now()}`,
+      TherapistId,
+      ClientId,
+      status: 'pending',
+      createdAt: new Date().toISOString()
     };
 
-    await addTherapyData(therapist);
-    res.status(201).json({ message: 'Therapist added successfully', therapist });
+    await addJournalAccessRequest(request);
+    res.status(201).json(request);
   } catch (error) {
-    console.error('Error adding therapist:', error);
-    res.status(500).json({ message: 'Error adding therapist', error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// get all therapists
-app.get('/therapists', async (req, res) => {
+// GET /journal/{clientId}/access-requests
+app.get('/journal/:clientId/access-requests', async (req, res) => {
   try {
-    const { location, expertise } = req.query;
-    
-    let filterExpression = '#type = :therapistType';
-    let expressionAttributeNames = { '#type': 'type' };
-    let expressionAttributeValues = { ':therapistType': 'therapist' };
+    const clientId = req.params.clientId;
+    const requests = await scanJournalAccessRequests(clientId);
+    res.status(200).json(requests);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    if (location) {
-      filterExpression += ' AND contains(#location, :location)';
-      expressionAttributeNames['#location'] = 'location';
-      expressionAttributeValues[':location'] = location;
-    }
+// GET /journal/{clientId}/entries
+app.get('/journal/:clientId/entries', async (req, res) => {
+  try {
+    const clientId = req.params.clientId;
+    const entries = await scanJournalEntries(clientId);
+    res.status(200).json(entries);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-    if (expertise) {
-      filterExpression += ' AND contains(#expertise, :expertise)';
-      expressionAttributeNames['#expertise'] = 'expertise';
-      expressionAttributeValues[':expertise'] = expertise;
-    }
-
-    const params = {
-      TableName: TABLE_NAME_2,
-      FilterExpression: filterExpression,
-      ExpressionAttributeNames: expressionAttributeNames,
-      ExpressionAttributeValues: expressionAttributeValues
+// POST /journal/{clientId}/entries
+app.post('/journal/:clientId/entries', async (req, res) => {
+  try {
+    const clientId = req.params.clientId;
+    const entry = {
+      JournalEntryId: `entry-${Date.now()}`,
+      clientId,
+      time: req.body.time,
+      feeling: req.body.feeling,
+      intensity: req.body.intensity,
+      content: req.body.content,
+      createdAt: new Date().toISOString()
     };
 
-    const data = await dynamodb.scan(params).promise();
-    res.status(200).json(data.Items);
+    await addJournalEntry(entry);
+    res.status(201).json(entry);
   } catch (error) {
-    console.error('Error fetching therapists:', error);
-    res.status(500).json({ message: 'Error fetching therapists', error });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /journal/{clientId}/journal-access-permissions---------
+app.put('/journal/:clientId/journal-access-permissions', async (req, res) => {
+  try {
+    const clientId = req.params.clientId;
+    const { therapists } = req.body;
+
+    const updatedPermissions = await updateJournalAccessPermissions(clientId, therapists);
+    res.status(200).json({ message: 'Permissions updated' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /journal/{clientId}/approve
+app.post('/journal/:clientId/approve', async (req, res) => {
+  try {
+    const clientId = req.params.clientId;
+    const { requestId, status } = req.body;
+
+    const updatedRequest = await updateJournalAccessRequest(
+      { JournalAccessRequestId: requestId },
+      'SET #status = :status',
+      { ':status': status },
+      { '#status': 'status' }
+    );
+
+    res.status(200).json(updatedRequest);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+// ---------------------done
+app.get('/journal/:clientId/therapists', async (req, res) => {
+  try {
+    const clientId = req.params.clientId;
+    const therapists = await getTherapistsWithJournalAccess(clientId);
+    res.status(200).json(therapists);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
 
-// Endpoint for therapist to update by ID
-app.put('/therapists/:id', async (req, res) => {
-  const { id } = req.params;
+// GET /journal/{clientId}/{journalId} --------------done
+app.get('/journal/:clientId/:journalId', async (req, res) => {
+  try {
+    const journalId = req.params.journalId;
+    const entry = await getJournalEntry({ JournalEntryId: journalId });
+    
+    if (!entry || entry.clientId !== req.params.clientId) {
+      return res.status(404).json({ message: 'Journal entry not found' });
+    }
+    
+    res.status(200).json(entry);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /journal/{clientId}/{journalId} ---------done
+app.put('/journal/:clientId/:journalId', async (req, res) => {
+  try {
+    const journalId = req.params.journalId;
+    const updateData = req.body;
+
+    const updateExpression = Object.keys(updateData)
+      .map(key => `#${key} = :${key}`)
+      .join(', ');
+
+    const updatedEntry = await updateJournalEntry(
+      { JournalEntryId: journalId },
+      `SET ${updateExpression}`,
+      Object.fromEntries(Object.entries(updateData).map(([k,v]) => [`:${k}`, v])),
+      Object.fromEntries(Object.keys(updateData).map(k => [`#${k}`, k]))
+    );
+
+    res.status(200).json(updatedEntry);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /journal/{clientId}/{journalId} ------done
+app.delete('/journal/:clientId/:journalId', async (req, res) => {
+  try {
+    await deleteJournalEntry({ JournalEntryId: req.params.journalId });
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+//SESSION_SLOT ENDPOINTS
+
+app.post('/session-slots/:TherapistId', async (req, res) => {
+  try {
+    const therapistId = req.params.TherapistId;
+    const slotData = req.body;
+
+    if (!therapistId || !slotData) {
+      return res.status(400).json({ error: 'Invalid request. Therapist ID and slot data are required.' });
+    }
+
+    const slot = {
+      SlotId: `slot-${Date.now()}`,
+      therapistId,
+      date: slotData.date,
+      startTime: slotData.startTime,
+      endTime: slotData.endTime,
+      status: 'available'
+    };
+
+    await addSessionSlot(slot);
+    res.status(201).json({ message: 'Session slot created successfully', slot });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating session slot', error });
+  }
+});
+
+// GET /session-slots/{therapistId} - List session slots for a therapist
+app.get('/session-slots/:TherapistId', async (req, res) => {
+  try {
+    const therapistId = req.params.TherapistId;
+    const sessionSlots = await scanSessionSlots(therapistId);
+    res.status(200).json(sessionSlots);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching session slots', error });
+  }
+});
+
+// POST /session-slots/{therapistId}/appointments - Request an appointment
+app.post('/session-slots/:TherapistId/appointments', async (req, res) => {
+  try {
+    const therapistId = req.params.TherapistId;
+    const request = req.body;
+
+    if (!therapistId || !request) {
+      return res.status(400).json({ error: 'Invalid request. Therapist ID and request data are required.' });
+    }
+
+    const appointmentRequest = {
+      AppointmentRequestId: `appointment-${Date.now()}`,
+      SlotId: request.SlotId,
+      ClientId: request.ClientId,
+      TherapistId: therapistId,
+      status: 'pending'
+    };
+
+    await addAppointmentRequest(appointmentRequest);
+    res.status(201).json({ message: 'Appointment requested successfully', appointmentRequest });
+  } catch (error) {
+    res.status(500).json({ message: 'Error requesting appointment', error });
+  }
+});
+
+// GET /session/{therapistId}/appointments - List pending appointment requests
+app.get('/session/:therapistId/appointments', async (req, res) => {
+  try {
+    const therapistId = req.params.therapistId;
+    const appointmentRequests = await scanAppointmentRequestsByTherapistId(therapistId);
+    res.status(200).json(appointmentRequests);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching appointment requests', error });
+  }
+});
+
+
+
+app.put('/session/:therapistId/appointments/:appointmentRequestId', async (req, res) => {
+  const therapistId = req.params.therapistId;
+  const appointmentRequestId = req.params.appointmentRequestId;
   const updateData = req.body;
-  if (!id || Object.keys(updateData).length === 0) {
+
+  if (!therapistId || !appointmentRequestId || Object.keys(updateData).length === 0) {
     return res.status(400).json({ error: 'Invalid request. ID and update data are required.' });
   }
+
   try {
     const updateExpressionParts = [];
     const expressionValues = {};
     const expressionAttributeNames = {};
+
     for (const key in updateData) {
       const attributePlaceholder = `#${key}`;
       const valuePlaceholder = `:${key}`;
@@ -426,168 +462,139 @@ app.put('/therapists/:id', async (req, res) => {
       expressionValues[valuePlaceholder] = updateData[key];
       expressionAttributeNames[attributePlaceholder] = key;
     }
+
     const updateExpression = `SET ${updateExpressionParts.join(', ')}`;
-    const updatedTherapist = await updateTherapyData(
-      { id },
+    const updatedAppointment = await updateAppointmentRequest(
+      { AppointmentRequestId: appointmentRequestId },
       updateExpression,
       expressionValues,
       expressionAttributeNames
     );
-    res.json({ message: 'Therapist updated successfully', updatedTherapist });
+
+    // Convert session slot to actual session if approved
+    if (updateData.status === 'approved') {
+      const appointmentRequest = await getAppointmentRequest({ AppointmentRequestId: appointmentRequestId });
+      const slotId = appointmentRequest.SlotId;
+      const slot = await getSessionSlot({ SlotId: slotId });
+
+      if (!slot) {
+        return res.status(404).json({ message: 'Session slot not found' });
+      }
+
+      // Update session slot status to booked
+      await updateSessionSlot(
+        { SlotId: slotId },
+        'SET #status = :status',
+        { ':status': 'booked' },
+        { '#status': 'status' }
+      );
+
+      // Create a new session
+      const session = {
+        SessionId: `session-${Date.now()}`,
+        date: slot.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        therapistId: slot.therapistId,
+        clientId: appointmentRequest.ClientId,
+        privateNotes: '',
+        sharedNotes: '',
+        status: 'scheduled'
+      };
+
+      await addSession(session);
+      res.json({ message: 'Appointment request updated and session created successfully', session });
+    } else {
+      res.json({ message: 'Appointment request updated successfully', updatedAppointment });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-//endpoint for deleting a therapist by id
-app.delete('/therapists/:id', async (req, res) => {
-  const { id } = req.params;
 
+//session endpoints 
+app.get('/session/:TherapistId/:SessionId', async (req, res) => {
+  const therapistId = req.params.TherapistId;
+  const sessionId = req.params.SessionId;
   try {
-   
-    const key = { id }; 
-    await deleteTherapyData(key); 
-
-    res.status(200).send({ message: `Therapist with ID ${id} deleted successfully.` });
+    const session = await getSession({ SessionId: sessionId });
+    if (!session || session.therapistId !== therapistId) {
+      return res.status(404).json({ message: 'Session not found' });
+    }
+    res.status(200).json(session);
   } catch (error) {
-    console.error('Error deleting therapist profile:', error);
-    res.status(500).send({ error: 'Failed to delete therapist profile.' });
+    res.status(500).json({ message: 'Error fetching session', error });
   }
 });
 
-//endpoint for therapists to request journal access from clients
-app.post('/therapists/:id/request-access', async (req, res) => {
-  const therapistId = req.params.id; 
-  const { clientId } = req.body; 
-
-  if (!therapistId || !clientId) {
-    return res.status(400).json({ message: 'Therapist ID and Client ID are required.' });
+app.put('/session/:TherapistId/:SessionId', async (req, res) => {
+  const therapistId = req.params.TherapistId;
+  const sessionId = req.params.SessionId;
+  const updateData = req.body;
+  if (!therapistId || !sessionId || Object.keys(updateData).length === 0) {
+    return res.status(400).json({ error: 'Invalid request. ID and update data are required.' });
   }
-
   try {
-    
-    const requestId = `request-${Date.now()}`;
-    const journalAccessRequest = {
-      id: requestId,
-      therapistId,
-      clientId,
-      status: 'pending', 
-      type: 'journal_access_request', 
-    };
-
-    await addTherapyData(journalAccessRequest);
-
-    res.status(200).json({ message: 'Journal access request sent successfully', requestId });
-  } catch (error) {
-    console.error('Error requesting journal access:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-// Endpoint to create available session slots for a therapist
-app.post('/therapists/:id/sessions', async (req, res) => {
-  const therapistId = req.params.id; 
-  const { startTime, endTime } = req.body; 
-
-  
-  if (!therapistId || !startTime || !endTime) {
-    return res.status(400).json({ message: 'Therapist ID, start time, and end time are required.' });
-  }
-
-  try {
-    
-    const session = {
-      id: `session-${Date.now()}`, 
-      therapistId,
-      startTime,
-      endTime,
-      status: 'available', 
-      type: 'session' 
-    };
-
-    
-    await addTherapyData(session);
-
-    res.status(201).json({ message: 'Session created successfully', session });
-  } catch (error) {
-    console.error('Error creating session:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-
-// Get pending appointments for therapist
-
-app.get('/therapists/:id/appointments', async (req, res) => {
-  try {
-    const requests = await scanAppointmentRequests(req.params.id);
-    res.status(200).json(requests);
-  } catch (error) {
-    console.error('Appointment Error:', error);
-    res.status(500).json({ 
-      message: 'Error fetching requests',
-      error: error.message
-    });
-  }
-});
-// therapists to accept or reject an appointment
-app.patch('/therapists/:id/appointments/:appointmentId', async (req, res) => {
-  const { id: therapistId, appointmentId } = req.params;
-  const { decision } = req.body;
-
-
-  if (!['approve', 'reject'].includes(decision)) {
-    return res.status(400).json({ message: 'Invalid decision. Must be "approve" or "reject".' });
-  }
-
-  try {
-    const request = await getTherapyData({ id: appointmentId });
-
-    if (!request || request.type !== 'appointment_request' || request.therapistId !== therapistId) {
-      return res.status(404).json({ message: 'Appointment request not found or unauthorized.' });
+    const session = await getSession({ SessionId: sessionId });
+    if (!session || session.therapistId !== therapistId) {
+      return res.status(404).json({ message: 'Session not found' });
     }
 
-   
-    const updatedRequest = await updateTherapyData(
-      { id: appointmentId }, 
-      'SET #status = :status', 
-      { ':status': decision === 'approve' ? 'approved' : 'rejected' }, 
-      { '#status': 'status' } 
+    const updateExpressionParts = [];
+    const expressionValues = {};
+    const expressionAttributeNames = {};
+
+    for (const key in updateData) {
+      const attributePlaceholder = `#${key}`;
+      const valuePlaceholder = `:${key}`;
+      updateExpressionParts.push(`${attributePlaceholder} = ${valuePlaceholder}`);
+      expressionValues[valuePlaceholder] = updateData[key];
+      expressionAttributeNames[attributePlaceholder] = key;
+    }
+
+    const updateExpression = `SET ${updateExpressionParts.join(', ')}`;
+    const updatedSession = await updateSession(
+      { SessionId: sessionId },
+      updateExpression,
+      expressionValues,
+      expressionAttributeNames
     );
 
-    
-    if (decision === 'approve') {
-      await updateTherapyData(
-        { id: request.sessionId }, 
-        'SET #status = :status', 
-        { ':status': 'booked' }, 
-        { '#status': 'status' } 
-      );
-    }
-
-    res.status(200).json({
-      message: `Appointment request ${decision}ed successfully`,
-      updatedRequest,
-    });
+    res.json({ message: 'Session updated successfully', updatedSession });
   } catch (error) {
-    console.error('Error processing appointment request:', error);
-    res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
+app.delete('/session/:TherapistId/:SessionId', async (req, res) => {
+  const therapistId = req.params.TherapistId;
+  const sessionId = req.params.SessionId;
+  try {
+    const session = await getSession({ SessionId: sessionId });
+    if (!session || session.therapistId !== therapistId) {
+      return res.status(404).json({ message: 'Session not found' });
+    }
 
-// POST /messages - Send message
+    await deleteSession({ SessionId: sessionId });
+    res.status(204).send({ message: `Session with ID ${sessionId} deleted successfully.` });
+  } catch (error) {
+    res.status(500).send({ error: 'Failed to delete session.' });
+  }
+});
+
+//messages endpoints 
+// POST /messages
 app.post('/messages', async (req, res) => {
   try {
     const { senderId, recipientId, content } = req.body;
-    
+
     if (!senderId || !recipientId || !content) {
       return res.status(400).json({ message: 'Sender ID, recipient ID, and content are required' });
     }
 
     const message = {
-      id: `msg-${Date.now()}`,
-      type: 'message',
+      messageId: `msg-${Date.now()}`,
       senderId,
       recipientId,
       content,
@@ -595,72 +602,57 @@ app.post('/messages', async (req, res) => {
       status: 'sent'
     };
 
-    await addTherapyData(message);
+    await addMessage(message);
     res.status(201).json(message);
   } catch (error) {
     res.status(500).json({ message: 'Error sending message', error: error.message });
   }
 });
 
-// GET /messages - Get conversation history
+// GET /messages
 app.get('/messages', async (req, res) => {
   try {
     const { clientId, therapistId } = req.query;
-    
+
     if (!clientId || !therapistId) {
       return res.status(400).json({ message: 'clientId and therapistId query parameters are required' });
     }
 
-    const params = {
-      TableName: 'therapy-data',
-      FilterExpression: '(senderId = :clientId AND recipientId = :therapistId) OR ' +
-                       '(senderId = :therapistId AND recipientId = :clientId)',
-      ExpressionAttributeValues: {
-        ':clientId': clientId,
-        ':therapistId': therapistId
-      }
-    };
-
-    const data = await dynamodb.scan(params).promise();
-    const sortedMessages = data.Items.sort((a, b) => 
-      new Date(a.timestamp) - new Date(b.timestamp)
-    );
-    
-    res.status(200).json(sortedMessages);
+    const messages = await scanMessages(clientId, therapistId);
+    res.status(200).json(messages);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching messages', error: error.message });
   }
 });
 
-// GET /messages/{id} - Get single message
-app.get('/messages/:id', async (req, res) => {
+// GET /messages/{messageId}
+app.get('/messages/:messageId', async (req, res) => {
   try {
-    const message = await getTherapyData({ id: req.params.id });
-    
-    if (!message || message.type !== 'message') {
+    const messageId = req.params.messageId;
+    const message = await getMessage({ messageId });
+
+    if (!message) {
       return res.status(404).json({ message: 'Message not found' });
     }
-    
+
     res.status(200).json(message);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching message', error: error.message });
   }
 });
 
-// PUT /messages/{id} - Update message
-app.put('/messages/:id', async (req, res) => {
+// PUT /messages/{messageId}
+app.put('/messages/:messageId', async (req, res) => {
   try {
-    const message = await getTherapyData({ id: req.params.id });
-    
-    if (!message || message.type !== 'message') {
+    const messageId = req.params.messageId;
+    const message = await getMessage({ messageId });
+
+    if (!message) {
       return res.status(404).json({ message: 'Message not found' });
     }
 
-    
     const allowedUpdates = ['content', 'status'];
-    const invalidUpdates = Object.keys(req.body).filter(
-      key => !allowedUpdates.includes(key)
-    );
+    const invalidUpdates = Object.keys(req.body).filter(key => !allowedUpdates.includes(key));
 
     if (invalidUpdates.length > 0) {
       return res.status(400).json({
@@ -668,8 +660,8 @@ app.put('/messages/:id', async (req, res) => {
       });
     }
 
-    const updatedMessage = await updateTherapyData(
-      { id: req.params.id },
+    const updatedMessage = await updateMessage(
+      { messageId },
       'SET content = :content, #status = :status',
       {
         ':content': req.body.content,
@@ -684,396 +676,242 @@ app.put('/messages/:id', async (req, res) => {
   }
 });
 
-// DELETE /messages/{id}
-app.delete('/messages/:id', async (req, res) => {
+// DELETE /messages/{messageId}
+app.delete('/messages/:messageId', async (req, res) => {
   try {
-    const message = await getTherapyData({ id: req.params.id });
-    
-    if (!message || message.type !== 'message') {
+    const messageId = req.params.messageId;
+    const message = await getMessage({ messageId });
+
+    if (!message) {
       return res.status(404).json({ message: 'Message not found' });
     }
 
-    await deleteTherapyData({ id: req.params.id });
+    await deleteMessage({ messageId });
     res.status(204).send();
   } catch (error) {
     res.status(500).json({ message: 'Error deleting message', error: error.message });
   }
 });
 
-// POST /journals - Create journal entry with emotional tracking
-app.post('/journals', async (req, res) => {
+//mapping endpoints
+// POST /therapists/{therapistId}/mapping-requests
+app.post('/therapists/:therapistId/mapping-requests', async (req, res) => {
   try {
-    const { time, feeling, intensity, clientId } = req.body;
-    if (!time || !feeling || intensity === undefined || !clientId) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
+    const therapistId = req.params.therapistId;
+    const { clientId } = req.body;
 
-    if (intensity < 1 || intensity > 10) {
-      return res.status(400).json({ message: 'Intensity must be between 1-10' });
-    }
-
-    const journalEntry = {
-      id: `journal-${Date.now()}`,
-      type: 'journal',
-      time,
-      feeling: feeling.toLowerCase(),
-      intensity: parseInt(intensity),
-      clientId,
-      createdAt: new Date().toISOString(),
-    };
-
-    await addTherapyData(journalEntry);
-    res.status(201).json(journalEntry);
-  } catch (error) {
-    res.status(500).json({ message: 'Error creating entry', error: error.message });
-  }
-});
-
-
-// GET /journals - Filter by type and user
-app.get('/journals', async (req, res) => {
-  try {
-    const { clientId } = req.query;
     if (!clientId) {
-      return res.status(400).json({ message: 'clientId query parameter is required' });
+      return res.status(400).json({ message: 'clientId is required' });
     }
 
-    const params = {
-      TableName: 'therapy-data',
-      FilterExpression: '#type = :type AND clientId = :clientId',
-      ExpressionAttributeNames: { '#type': 'type' },
-      ExpressionAttributeValues: { ':type': 'journal', ':clientId': clientId }
-    };
-
-    const data = await dynamodb.scan(params).promise();
-    const formatted = data.Items.map(item => ({
-      id: item.id,
-      time: item.time,
-      feeling: item.feeling,
-      intensity: item.intensity,
-      clientId: item.clientId,
-      createdAt: item.createdAt
-    }));
-
-    res.status(200).json(formatted);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching journals', error: error.message });
-  }
-});
-
-
-// GET /journals/{id} - Get specific entry
-app.get('/journals/:id', async (req, res) => {
-  try {
-    const journal = await getTherapyData({ id: req.params.id });
-    if (!journal || journal.type !== 'journal') {
-      return res.status(404).json({ message: 'Journal not found' });
-    }
-
-    const response = {
-      id: journal.id,
-      time: journal.time,
-      feeling: journal.feeling,
-      intensity: journal.intensity,
-      clientId: journal.clientId,
-      createdAt: journal.createdAt
-    };
-
-    res.status(200).json(response);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching journal', error: error.message });
-  }
-});
-
-
-// PUT /journals/{id} - Update entry
-app.put('/journals/:id', async (req, res) => {
-  try {
-    const journal = await getTherapyData({ id: req.params.id });
-    if (!journal || journal.type !== 'journal') {
-      return res.status(404).json({ message: 'Journal not found' });
-    }
-
-    const allowedUpdates = ['time', 'feeling', 'intensity'];
-    const invalidUpdates = Object.keys(req.body).filter(
-      key => !allowedUpdates.includes(key)
-    );
-    if (invalidUpdates.length > 0) {
-      return res.status(400).json({
-        message: `Invalid updates: ${invalidUpdates.join(', ')}`
-      });
-    }
-
-    if (req.body.intensity && (req.body.intensity < 1 || req.body.intensity > 10)) {
-      return res.status(400).json({ message: 'Intensity must be between 1-10' });
-    }
-
-    const updateResult = await updateTherapyData(
-      { id: req.params.id },
-      'SET ' + Object.keys(req.body).map(k => `#${k} = :${k}`).join(', '),
-      Object.fromEntries(Object.entries(req.body).map(([k,v]) => [`:${k}`, k === 'intensity' ? parseInt(v) : v])),
-      Object.fromEntries(Object.keys(req.body).map(k => [`#${k}`, k]))
-    );
-
-    res.status(200).json(updateResult);
-  } catch (error) {
-    res.status(500).json({ message: 'Error updating journal', error: error.message });
-  }
-});
-
-
-// DELETE /journals/{id}
-app.delete('/journals/:id', async (req, res) => {
-  try {
-    const journal = await getTherapyData({ id: req.params.id });
-    
-    if (!journal || journal.type !== 'journal') {
-      return res.status(404).json({ message: 'Journal not found' });
-    }
-
-    await deleteTherapyData({ id: req.params.id });
-    res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ message: 'Error deleting journal', error: error.message });
-  }
-});
-
-//SESSIONS ENDPOINTS
-//POST A SESSION 
-app.post('/sessions', async (req, res) => {
-  const { date, startTime, endTime, therapistId, clientId, privateNotes, sharedNotes } = req.body;
-
-  if (!date || !startTime || !endTime || !therapistId || !clientId) {
-    return res.status(400).json({ message: 'Date, startTime, endTime, therapistId, and clientId are required.' });
-  }
-
-  try {
-    const session = {
-      id: `session-${Date.now()}`,
-      type: 'session',
-      date,
-      startTime,
-      endTime,
+    const request = {
+      mappingRequestId: `mapreq-${Date.now()}`,
       therapistId,
       clientId,
-      privateNotes: privateNotes || '',
-      sharedNotes: sharedNotes || '',
-      status: 'scheduled'
+      status: 'pending',
+      createdAt: new Date().toISOString()
     };
 
-    await addTherapyData(session);
-    res.status(201).json({ message: 'Session created successfully', session });
+    await addMappingRequest(request);
+    res.status(201).json(request);
   } catch (error) {
-    console.error('Error creating session:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    res.status(500).json({ message: 'Error sending mapping request', error: error.message });
   }
 });
 
-
-//get all sessions
-app.get('/sessions', async (req, res) => {
+// PUT /clients/{clientId}/mapping-requests/{therapistId}
+app.put('/clients/:clientId/mapping-requests/:therapistId', async (req, res) => {
   try {
-    const sessions = await scanSessions();
-    const formattedSessions = sessions.map(session => ({
-      ...session,
-      startTime: session.startTime,
-      endTime: session.endTime
-    }));
-    res.status(200).json(formattedSessions);
-  } catch (error) {
-    console.error('Error fetching sessions:', error);
-    res.status(500).json({ message: 'Error fetching sessions', error: error.message });
-  }
-});
+    const clientId = req.params.clientId;
+    const therapistId = req.params.therapistId;
+    const { status } = req.body;
 
-
-// Get single session by ID
-app.get('/sessions/:id', async (req, res) => {
-  try {
-    const session = await getTherapyData({ id: req.params.id });
-    
-    if (!session || session.type !== 'session') {
-      return res.status(404).json({ message: 'Session not found' });
+    if (!status) {
+      return res.status(400).json({ message: 'status is required' });
     }
-    
-    const formattedSession = {
-      ...session,
-      startTime: session.startTime,
-      endTime: session.endTime
+
+    // Fetch the mapping request from MappingRequests table
+    const request = await getMappingRequest(clientId, therapistId);
+
+    if (!request) {
+      return res.status(404).json({ message: 'Mapping request not found' });
+    }
+
+    // Update the status of the mapping request
+    const updatedRequest = await updateMappingRequest(
+      { mappingRequestId: request.mappingRequestId },
+      'SET #status = :status',
+      { ':status': status },
+      { '#status': 'status' }
+    );
+
+    // If approved, copy details to MappedTherapists table
+    if (status === 'approved') {
+      const mapping = {
+        clientId,
+        therapistId,
+        mappedAt: new Date().toISOString()
+      };
+
+      try {
+        await addMappedTherapist(mapping);
+        console.log('Mapped therapist added:', mapping);
+      } catch (error) {
+        console.error('Error adding mapped therapist:', error);
+        return res.status(500).json({ message: 'Error adding mapped therapist', error: error.message });
+      }
+    }
+
+    res.status(200).json(updatedRequest);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating mapping request', error: error.message });
+  }
+});
+
+
+// DELETE /clients/{clientId}/mapped-therapists/{therapistId}
+app.delete('/clients/:clientId/mapped-therapists/:therapistId', async (req, res) => {
+  try {
+    const clientId = req.params.clientId;
+    const therapistId = req.params.therapistId;
+
+    await deleteMappedTherapist({ clientId, therapistId });
+    res.status(204).send();
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting mapped therapist', error: error.message });
+  }
+});
+
+
+
+//--------------------------------------------------------------------------------------------------------------------------------------
+
+// Therapists endpoint --- done
+app.post('/therapists', async (req, res) => {
+  try {
+    const { email, name, location, expertise } = req.body;
+
+    if (!email || !name) {
+      return res.status(400).json({ message: 'Email and name are required.' });
+    }
+
+    const therapist = {
+      TherapistId: `therapist-${Date.now()}`,
+      email,
+      name,
+      location,
+      expertise,
+      mappedClientsIds: [] // Optional
     };
-    
-    res.status(200).json(formattedSession);
+
+    await addTherapist(therapist);
+    res.status(201).json({ message: 'Therapist added successfully', therapist });
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching session', error });
+    console.error('Error adding therapist:', error);
+    res.status(500).json({ message: 'Error adding therapist', error: error.message });
   }
 });
 
-
-// Update session endpoint
-app.put('/sessions/:id', async (req, res) => {
+// get all therapists
+app.get('/therapists', async (req, res) => {
   try {
-    const session = await getTherapyData({ id: req.params.id });
-    
-    if (!session || session.type !== 'session') {
-      return res.status(404).json({ message: 'Session not found' });
+    const therapists = await scanTherapists();
+    res.status(200).json(therapists);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching therapists', error });
+  }
+});
+// Endpoint to get a therapist by ID
+app.get('/therapists/:TherapistId', async (req, res) => {
+  const therapistId = req.params.TherapistId;
+  try {
+    const therapist = await getTherapist({ TherapistId: therapistId });
+    if (!therapist) {
+      return res.status(404).json({ message: 'Therapist not found' });
     }
+    res.status(200).json(therapist);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching therapist', error });
+  }
+});
 
-    const { date, startTime, endTime, therapistId, clientId, privateNotes, sharedNotes } = req.body;
-    
+// Endpoint for therapist to update by ID
+app.put('/therapists/:TherapistId', async (req, res) => {
+  const therapistId = req.params.TherapistId;
+  const updateData = req.body;
+  if (!therapistId || Object.keys(updateData).length === 0) {
+    return res.status(400).json({ error: 'Invalid request. ID and update data are required.' });
+  }
+  try {
     const updateExpressionParts = [];
     const expressionValues = {};
     const expressionAttributeNames = {};
 
-    const updateFields = { date, startTime, endTime, therapistId, clientId, privateNotes, sharedNotes };
-
-    for (const [key, value] of Object.entries(updateFields)) {
-      if (value !== undefined) {
-        const attrPlaceholder = `#${key}`;
-        const valuePlaceholder = `:${key}`;
-        
-        updateExpressionParts.push(`${attrPlaceholder} = ${valuePlaceholder}`);
-        expressionAttributeNames[attrPlaceholder] = key;
-        expressionValues[valuePlaceholder] = value;
-      }
+    for (const key in updateData) {
+      const attributePlaceholder = `#${key}`;
+      const valuePlaceholder = `:${key}`;
+      updateExpressionParts.push(`${attributePlaceholder} = ${valuePlaceholder}`);
+      expressionValues[valuePlaceholder] = updateData[key];
+      expressionAttributeNames[attributePlaceholder] = key;
     }
 
-    if (updateExpressionParts.length === 0) {
-      return res.status(400).json({ message: 'No valid fields to update' });
-    }
-
-    const updatedSession = await updateTherapyData(
-      { id: req.params.id },
-      `SET ${updateExpressionParts.join(', ')}`,
+    const updateExpression = `SET ${updateExpressionParts.join(', ')}`;
+    const updatedTherapist = await updateTherapist(
+      { TherapistId: therapistId },
+      updateExpression,
       expressionValues,
       expressionAttributeNames
     );
 
-    res.status(200).json(updatedSession);
+    res.json({ message: 'Therapist updated successfully', updatedTherapist });
   } catch (error) {
-    res.status(500).json({ message: 'Error updating session', error: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
-
-// Delete session endpoint
-app.delete('/sessions/:id', async (req, res) => {
+//endpoint for deleting a therapist by id
+app.delete('/therapists/:TherapistId', async (req, res) => {
+  const therapistId = req.params.TherapistId;
   try {
-    const session = await getTherapyData({ id: req.params.id });
-    
-    if (!session || session.type !== 'session') {
-      return res.status(404).json({ message: 'Session not found' });
-    }
-
-    await deleteTherapyData({ id: req.params.id });
-    res.status(204).send();
+    await deleteTherapist({ TherapistId: therapistId });
+    res.status(204).send({ message: `Therapist with ID ${therapistId} deleted successfully.` });
   } catch (error) {
-    res.status(500).json({ message: 'Error deleting session' });
+    res.status(500).send({ error: 'Failed to delete therapist profile.' });
   }
 });
 
-// POST /therapists/{therapistId}/mapping-requests
-app.post('/therapists/:therapistId/mapping-requests', async (req, res) => {
-  const { therapistId } = req.params;
-  const { clientId } = req.body;
-
+//search endpoint for therapists 
+app.get('/therapists/:therapistId/search', async (req, res) => {
   try {
-    const therapist = await getTherapyData({ id: therapistId });
-    const client = await getTherapyData({ id: clientId });
+    const therapistId = req.params.therapistId;
+    const { keyword } = req.query;
 
-    if (!therapist || therapist.type !== 'therapist' || !client || client.type !== 'client') {
-      return res.status(404).json({ message: 'Therapist or client not found.' });
+    if (!keyword) {
+      return res.status(400).json({ message: 'Keyword is required for search' });
     }
 
-    const updateExpression = 'SET mappingRequests = list_append(if_not_exists(mappingRequests, :emptyList), :newRequest)';
-    const expressionValues = {
-      ':emptyList': [],
-      ':newRequest': [clientId]
-    };
+    // Search clients, notes, and journals
+    const clients = await searchClients(keyword);
+    const journals = await searchJournals(keyword, 'client');
+    const messages = await searchMessages(therapistId, keyword);
 
-    await updateTherapyData({ id: therapistId }, updateExpression, expressionValues);
-
-    res.status(200).json({ message: 'Mapping request sent successfully.' });
+    res.status(200).json({
+      therapistId,
+      results: {
+        clients,
+        journals,
+        messages,
+      },
+    });
   } catch (error) {
-    console.error('Error sending mapping request:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Error performing search:', error);
+    res.status(500).json({ message: 'Error performing search', error: error.message });
   }
 });
 
-// PATCH /clients/{clientId}/mapping-requests/{therapistId}
-app.patch('/clients/:clientId/mapping-requests/:therapistId', async (req, res) => {
-  const { clientId, therapistId } = req.params;
-  const { status } = req.body; // 'accepted' or 'rejected'
 
-  try {
-    const client = await getTherapyData({ id: clientId });
-    const therapist = await getTherapyData({ id: therapistId });
 
-    if (!client || client.type !== 'client' || !therapist || therapist.type !== 'therapist') {
-      return res.status(404).json({ message: 'Client or therapist not found.' });
-    }
 
-    if (status === 'accepted') {
-      // Update client's mappedTherapists
-      await updateTherapyData(
-        { id: clientId },
-        'SET mappedTherapists = list_append(if_not_exists(mappedTherapists, :emptyList), :newTherapist)',
-        { ':emptyList': [], ':newTherapist': [therapistId] }
-      );
-
-      // Update therapist's mappedClients
-      await updateTherapyData(
-        { id: therapistId },
-        'SET mappedClients = list_append(if_not_exists(mappedClients, :emptyList), :newClient)',
-        { ':emptyList': [], ':newClient': [clientId] }
-      );
-    }
-
-    // Remove the mapping request
-    await updateTherapyData(
-      { id: therapistId },
-      'SET mappingRequests = list_remove(mappingRequests, :clientId)',
-      { ':clientId': clientId }
-    );
-
-    res.status(200).json({ message: `Mapping request ${status}.` });
-  } catch (error) {
-    console.error('Error updating mapping request:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
-
-// DELETE /clients/{clientId}/mapped-therapists/{therapistId}
-app.delete('/clients/:clientId/mapped-therapists/:therapistId', async (req, res) => {
-  const { clientId, therapistId } = req.params;
-
-  try {
-    const client = await getTherapyData({ id: clientId });
-    const therapist = await getTherapyData({ id: therapistId });
-
-    if (!client || client.type !== 'client' || !therapist || therapist.type !== 'therapist') {
-      return res.status(404).json({ message: 'Client or therapist not found.' });
-    }
-
-    // Remove therapist from client's mappedTherapists
-    await updateTherapyData(
-      { id: clientId },
-      'SET mappedTherapists = list_remove(mappedTherapists, :therapistId)',
-      { ':therapistId': therapistId }
-    );
-
-    // Remove client from therapist's mappedClients
-    await updateTherapyData(
-      { id: therapistId },
-      'SET mappedClients = list_remove(mappedClients, :clientId)',
-      { ':clientId': clientId }
-    );
-
-    res.status(200).json({ message: 'Mapping removed successfully.' });
-  } catch (error) {
-    console.error('Error removing mapping:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-});
 
 
 app.use(express.static(path.join(__dirname, '../therapy-app/dist')));
