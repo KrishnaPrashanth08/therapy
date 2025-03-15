@@ -1,0 +1,77 @@
+Table Clients {
+  ClientId varchar [pk]
+  Name varchar
+  Email varchar
+}
+
+Table Therapists {
+  TherapistId varchar [pk]
+  Name varchar
+  Email varchar
+  Location varchar
+  Expertise varchar
+}
+
+Table SessionSlots {
+  SlotId varchar [pk]
+  TherapistId varchar [ref: > Therapists.TherapistId]
+  Date date
+  StartTime time
+  EndTime time
+  Status varchar
+}
+
+Table AppointmentRequests {
+  AppointmentRequestId varchar [pk]
+  SlotId varchar [ref: > SessionSlots.SlotId]
+  ClientId varchar [ref: > Clients.ClientId]
+  TherapistId varchar [ref: > Therapists.TherapistId]
+  Status varchar
+}
+
+Table Sessions {
+  SessionId varchar [pk]
+  Date date
+  StartTime time
+  EndTime time
+  TherapistId varchar [ref: > Therapists.TherapistId]
+  ClientId varchar [ref: > Clients.ClientId]
+  PrivateNotes text
+  SharedNotes text
+}
+
+Table JournalEntries {
+  JournalEntryId varchar [pk]
+  ClientId varchar [ref: > Clients.ClientId]
+  Time datetime
+  Feeling text
+  Intensity int
+  Content text
+}
+
+Table JournalAccessRequests {
+  JournalAccessRequestId varchar [pk]
+  ClientId varchar [ref: > Clients.ClientId]
+  TherapistId varchar [ref: > Therapists.TherapistId]
+  Status varchar
+}
+
+Table Messages {
+  MessageId varchar [pk]
+  SenderId varchar
+  RecipientId varchar
+  Content text
+  Timestamp datetime
+}
+
+Table MappingRequests {
+  MappingRequestId varchar [pk]
+  ClientId varchar [ref: > Clients.ClientId]
+  TherapistId varchar [ref: > Therapists.TherapistId]
+  Status varchar
+}
+
+Table MappedTherapists {
+  ClientId varchar [ref: > Clients.ClientId]
+  TherapistId varchar [ref: > Therapists.TherapistId]
+}
