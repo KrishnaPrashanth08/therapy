@@ -1,77 +1,218 @@
-Table Clients {
-  ClientId varchar [pk]
-  Name varchar
-  Email varchar
-}
+# Therapy Application DynamoDB Schema
 
-Table Therapists {
-  TherapistId varchar [pk]
-  Name varchar
-  Email varchar
-  Location varchar
-  Expertise varchar
-}
+## 1. Clients Table
+**Purpose**: Stores information about therapy clients, including their personal details and relationships with therapists.
 
-Table SessionSlots {
-  SlotId varchar [pk]
-  TherapistId varchar [ref: > Therapists.TherapistId]
-  Date date
-  StartTime time
-  EndTime time
-  Status varchar
-}
+**Attributes**:
+- ClientId (String) - Partition Key
+- email (String)
+- name (String)
+- password (String) - Hashed password for authentication
+- mappedTherapistsIds (String)
 
-Table AppointmentRequests {
-  AppointmentRequestId varchar [pk]
-  SlotId varchar [ref: > SessionSlots.SlotId]
-  ClientId varchar [ref: > Clients.ClientId]
-  TherapistId varchar [ref: > Therapists.TherapistId]
-  Status varchar
-}
+**Global Secondary Indexes**:
+1. EmailIndex
+   - Partition Key: email
+   - Projection: ALL
+   - Purpose: Allows lookup of clients by email address for authentication
 
-Table Sessions {
-  SessionId varchar [pk]
-  Date date
-  StartTime time
-  EndTime time
-  TherapistId varchar [ref: > Therapists.TherapistId]
-  ClientId varchar [ref: > Clients.ClientId]
-  PrivateNotes text
-  SharedNotes text
-}
+2. MappedTherapistsIdIndex
+   - Partition Key: mappedTherapistsIds
+   - Projection: ALL
+   - Purpose: Allows lookup of clients by their therapist's ID to retrieve all clients for a specific therapist
 
-Table JournalEntries {
-  JournalEntryId varchar [pk]
-  ClientId varchar [ref: > Clients.ClientId]
-  Time datetime
-  Feeling text
-  Intensity int
-  Content text
-}
+**API Operations**:
+- GetClientByID: GetItem operation on primary key ClientId
+- GetClientsByTherapist: Query MappedTherapistsIdIndex where mappedTherapistsIds = [therapist ID]
 
-Table JournalAccessRequests {
-  JournalAccessRequestId varchar [pk]
-  ClientId varchar [ref: > Clients.ClientId]
-  TherapistId varchar [ref: > Therapists.TherapistId]
-  Status varchar
-}
+## 2. Therapists Table
+**Purpose**: Stores information about therapists, including their professional details and client relationships.
 
-Table Messages {
-  MessageId varchar [pk]
-  SenderId varchar
-  RecipientId varchar
-  Content text
-  Timestamp datetime
-}
+**Attributes**:
+- TherapistId (String) - Partition Key
+- email (String)
+- password (String) - Hashed password for authentication
+- name (String)
+- expertise (String)
+- location (String)
+- mappedClientsIds (String)
 
-Table MappingRequests {
-  MappingRequestId varchar [pk]
-  ClientId varchar [ref: > Clients.ClientId]
-  TherapistId varchar [ref: > Therapists.TherapistId]
-  Status varchar
-}
+**Global Secondary Indexes**:
+1. EmailIndex
+   - Partition Key: email
+   - Projection: ALL
+   - Purpose: Allows lookup of therapists by email address for authentication
 
-Table MappedTherapists {
-  ClientId varchar [ref: > Clients.ClientId]
-  TherapistId varchar [ref: > Therapists.TherapistId]
-}
+2. locationExpertiseIndex
+   - Partition Key: location
+   - Sort Key: expertise
+   - Projection: ALL
+   - Purpose: Allows clients to search for therapists by location and filter by expertise
+
+**API Operations**:
+- GetTherapistByID: GetItem operation on primary key TherapistId
+- SearchTherapistsByLocation: Query locationExpertiseIndex where location = [location]
+- SearchTherapistsByLocationAndExpertise: Query locationExpertiseIndex where location = [location] and expertise = [expertise]
+
+## 3. SessionSlots Table
+**Purpose**: Stores available time slots for therapy sessions offered by therapists.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- SlotId (String) - Sort Key
+- date (String)
+- startTime (String)
+- endTime (String)
+- status (String) - Available, Booked, Cancelled
+
+**API Operations**:
+- GetSlotsByTherapist: Query primary table where TherapistId = [therapist ID]
+- GetSlotsByTherapistAndDate: Query primary table where TherapistId = [therapist ID] and begins_with(SlotId, [date prefix])
+- CreateNewSlot: PutItem operation with primary key {TherapistId, SlotId}
+- UpdateSlotStatus: UpdateItem operation on primary key {TherapistId, SlotId}
+
+## 4. AppointmentRequests Table
+**Purpose**: Manages appointment requests from clients to therapists.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- AppointmentRequestId (String) - Sort Key
+- ClientId (String)
+- SlotId (String)
+- status (String) - Pending, Approved, Rejected, Cancelled
+
+**Global Secondary Indexes**:
+1. ClientAppointmentsIndex
+   - Partition Key: ClientId
+   - Sort Key: status
+   - Projection: ALL
+   - Purpose: Allows clients to view all their appointment requests and filter by status
+
+**API Operations**:
+- GetAppointmentRequestsByTherapist: Query primary table where TherapistId = [therapist ID]
+- GetAppointmentRequestsByClient: Query ClientAppointmentsIndex where ClientId = [client ID]
+- GetAppointmentRequestsByClientAndStatus: Query ClientAppointmentsIndex where ClientId = [client ID] and status = [status]
+- CreateAppointmentRequest: PutItem operation with primary key {TherapistId, AppointmentRequestId}
+- UpdateAppointmentRequestStatus: UpdateItem operation on primary key {TherapistId, AppointmentRequestId}
+
+## 5. Sessions Table
+**Purpose**: Records therapy sessions, including metadata and notes.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- SessionId (String) - Sort Key
+- clientId (String)
+- date (String)
+- startTime (String)
+- endTime (String)
+- status (String) - Scheduled, Completed, Cancelled, No-Show
+- sharedNotes (String) - Notes visible to both therapist and client
+- privateNotes (String) - Notes visible only to therapist
+
+**Global Secondary Indexes**:
+1. ClientSessionsIndex
+   - Partition Key: clientId
+   - Sort Key: date
+   - Projection: ALL
+   - Purpose: Allows clients to view their session history sorted by date
+
+**API Operations**:
+- GetSessionsByTherapist: Query primary table where TherapistId = [therapist ID]
+- GetSessionsByClient: Query ClientSessionsIndex where clientId = [client ID]
+- GetSessionsByClientAndDate: Query ClientSessionsIndex where clientId = [client ID] and date = [date]
+- CreateSession: PutItem operation with primary key {TherapistId, SessionId}
+- UpdateSessionNotes: UpdateItem operation on primary key {TherapistId, SessionId}
+- UpdateSessionStatus: UpdateItem operation on primary key {TherapistId, SessionId}
+
+## 6. JournalEntries Table
+**Purpose**: Stores client's personal journal entries for therapeutic purposes.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- JournalEntryId (String) - Sort Key
+- createdAt (String)
+- time (String)
+- content (String)
+- feeling (String)
+- intensity (integer)
+
+**API Operations**:
+- GetJournalEntriesByClient: Query primary table where ClientId = [client ID]
+- GetJournalEntryById: GetItem operation on primary key {ClientId, JournalEntryId}
+- CreateJournalEntry: PutItem operation with primary key {ClientId, JournalEntryId}
+- UpdateJournalEntry: UpdateItem operation on primary key {ClientId, JournalEntryId}
+- DeleteJournalEntry: DeleteItem operation on primary key {ClientId, JournalEntryId}
+
+## 7. JournalAccessRequests Table
+**Purpose**: Manages therapist requests to access client journals.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- JournalAccessRequestId (String) - Sort Key
+- TherapistId (String)
+- createdAt (String)
+- status (String) - Pending, Approved, Rejected, Revoked
+
+**API Operations**:
+- GetAccessRequestsByClient: Query primary table where ClientId = [client ID]
+- CreateAccessRequest: PutItem operation with primary key {ClientId, JournalAccessRequestId}
+- UpdateAccessRequestStatus: UpdateItem operation on primary key {ClientId, JournalAccessRequestId}
+
+## 8. MappingRequests Table
+**Purpose**: Tracks requests to establish client-therapist relationships.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- mappingRequestId (String) - Sort Key
+- therapistId (String)
+- createdAt (String)
+- status (String) - Pending, Approved, Rejected
+
+**API Operations**:
+- GetMappingRequestsByClient: Query primary table where ClientId = [client ID]
+- CreateMappingRequest: PutItem operation with primary key {ClientId, mappingRequestId}
+- UpdateMappingRequestStatus: UpdateItem operation on primary key {ClientId, mappingRequestId}
+
+## 9. MappedTherapists Table
+**Purpose**: Records established client-therapist relationships.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- TherapistId (String) - Sort Key
+- mappedAt (String)
+
+**API Operations**:
+- GetMappedTherapistsByClient: Query primary table where ClientId = [client ID]
+- CreateTherapistMapping: PutItem operation with primary key {ClientId, TherapistId}
+- DeleteTherapistMapping: DeleteItem operation on primary key {ClientId, TherapistId}
+
+## 10. Messages Table
+**Purpose**: Handles secure communication between clients and therapists.
+
+**Attributes**:
+- messageId (String) - Partition Key
+- senderId (String)
+- recipientId (String)
+- timestamp (String)
+- content (String)
+- status (String) - Sent, Delivered, Read
+
+**Global Secondary Indexes**:
+1. SenderIndex
+   - Partition Key: senderId
+   - Sort Key: timestamp
+   - Projection: ALL
+   - Purpose: Allows users to view messages they've sent, sorted by time
+
+2. RecipientIndex
+   - Partition Key: recipientId
+   - Sort Key: timestamp
+   - Projection: ALL
+   - Purpose: Allows users to view messages they've received, sorted by time
+
+**API Operations**:
+- GetMessageById: GetItem operation on primary key messageId
+- GetMessagesBySender: Query SenderIndex where senderId = [user ID]
+- GetMessagesByRecipient: Query RecipientIndex where recipientId = [user ID]
+- CreateMessage: PutItem operation with primary key messageId
+
