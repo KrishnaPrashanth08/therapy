@@ -43,16 +43,20 @@
    - Projection: ALL
    - Purpose: Allows lookup of therapists by email address for authentication
 
-2. locationExpertiseIndex
+2. LocationIndex
    - Partition Key: location
-   - Sort Key: expertise
    - Projection: ALL
-   - Purpose: Allows clients to search for therapists by location and filter by expertise
+   - Purpose: Allows clients to search for therapists by location
+
+3. ExpertiseIndex
+   - Partition Key: expertise
+   - Projection: ALL
+   - Purpose: Allows clients to search for therapists by expertise
 
 **API Operations**:
 - GetTherapistByID: GetItem operation on primary key TherapistId
-- SearchTherapistsByLocation: Query locationExpertiseIndex where location = [location]
-- SearchTherapistsByLocationAndExpertise: Query locationExpertiseIndex where location = [location] and expertise = [expertise]
+- SearchTherapistsByLocation: Query LocationIndex where location = [location]
+- SearchTherapistsByExpertise: Query ExpertiseIndex where expertise = [expertise]
 
 ## 3. SessionSlots Table
 **Purpose**: Stores available time slots for therapy sessions offered by therapists.
@@ -136,8 +140,16 @@
 - feeling (String)
 - intensity (integer)
 
+**Global Secondary Indexes**:
+1. TimeIndex
+   - Partition Key: ClientId
+   - Sort Key: createdAt
+   - Projection: ALL
+   - Purpose: Allows clients to retrieve journal entries sorted by creation time
+
 **API Operations**:
 - GetJournalEntriesByClient: Query primary table where ClientId = [client ID]
+- GetJournalEntriesByTime: Query TimeIndex where ClientId = [client ID] 
 - GetJournalEntryById: GetItem operation on primary key {ClientId, JournalEntryId}
 - CreateJournalEntry: PutItem operation with primary key {ClientId, JournalEntryId}
 - UpdateJournalEntry: UpdateItem operation on primary key {ClientId, JournalEntryId}
@@ -153,8 +165,16 @@
 - createdAt (String)
 - status (String) - Pending, Approved, Rejected, Revoked
 
+**Global Secondary Indexes**:
+1. TherapistRequestsIndex
+   - Partition Key: TherapistId
+   - Sort Key: createdAt
+   - Projection: ALL
+   - Purpose: Allows therapists to view all access requests they've made
+
 **API Operations**:
 - GetAccessRequestsByClient: Query primary table where ClientId = [client ID]
+- GetAccessRequestsByTherapist: Query TherapistRequestsIndex where TherapistId = [therapist ID]
 - CreateAccessRequest: PutItem operation with primary key {ClientId, JournalAccessRequestId}
 - UpdateAccessRequestStatus: UpdateItem operation on primary key {ClientId, JournalAccessRequestId}
 
@@ -168,8 +188,16 @@
 - createdAt (String)
 - status (String) - Pending, Approved, Rejected
 
+**Global Secondary Indexes**:
+1. TherapistMappingRequestsIndex
+   - Partition Key: therapistId
+   - Sort Key: createdAt
+   - Projection: ALL
+   - Purpose: Allows therapists to view all mapping requests they're involved in
+
 **API Operations**:
 - GetMappingRequestsByClient: Query primary table where ClientId = [client ID]
+- GetMappingRequestsByTherapist: Query TherapistMappingRequestsIndex where therapistId = [therapist ID]
 - CreateMappingRequest: PutItem operation with primary key {ClientId, mappingRequestId}
 - UpdateMappingRequestStatus: UpdateItem operation on primary key {ClientId, mappingRequestId}
 
@@ -181,8 +209,16 @@
 - TherapistId (String) - Sort Key
 - mappedAt (String)
 
+**Global Secondary Indexes**:
+1. TherapistClientsIndex
+   - Partition Key: TherapistId
+   - Sort Key: mappedAt
+   - Projection: ALL
+   - Purpose: Allows therapists to view all clients mapped to them
+
 **API Operations**:
 - GetMappedTherapistsByClient: Query primary table where ClientId = [client ID]
+- GetMappedClientsByTherapist: Query TherapistClientsIndex where TherapistId = [therapist ID]
 - CreateTherapistMapping: PutItem operation with primary key {ClientId, TherapistId}
 - DeleteTherapistMapping: DeleteItem operation on primary key {ClientId, TherapistId}
 
@@ -210,9 +246,16 @@
    - Projection: ALL
    - Purpose: Allows users to view messages they've received, sorted by time
 
+3. ConversationIndex
+   - Partition Key: senderId
+   - Sort Key: recipientId
+   - Projection: ALL
+   - Purpose: Allows users to view all messages in a conversation with another specific user
+
 **API Operations**:
 - GetMessageById: GetItem operation on primary key messageId
 - GetMessagesBySender: Query SenderIndex where senderId = [user ID]
 - GetMessagesByRecipient: Query RecipientIndex where recipientId = [user ID]
+- GetConversationMessages: Query ConversationIndex where senderId = [user ID] and recipientId = [user ID]
 - CreateMessage: PutItem operation with primary key messageId
-
+- UpdateMessageStatus: UpdateItem operation on primary key messageId
