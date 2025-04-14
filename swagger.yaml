@@ -16,46 +16,6 @@ servers:
     description: Development Server
 
 paths:
-  /signup:
-    post:
-      summary: User Signup
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/signup_body'
-        required: true
-      responses:
-        "200":
-          description: Signup successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/inline_response_200'
-        "400":
-          description: Invalid input
-
-  /login:
-    post:
-      summary: User Login
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/login_body'
-        required: true
-      responses:
-        "200":
-          description: Login successful
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/inline_response_200_1'
-        "401":
-          description: Unauthorized
-        "400":
-          description: Invalid input
-
   /clients:
     post:
       summary: Create a client profile
