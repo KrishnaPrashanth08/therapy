@@ -129,7 +129,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/therapist'
 
-  /journal/{therapistId}/request-access:
+  /journal/therapists/{therapistId}/request-access:
     post:
       summary: Request journal access from clients
       description: Therapist can request access to a client’s journal.
@@ -161,7 +161,7 @@ paths:
         "500":
           description: Internal server error
 
-  /journal/{clientId}/access-requests:
+  /journal/clients/{clientId}/access-requests:
     get:
       summary: List pending journal access requests
       parameters:
@@ -180,7 +180,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/journal_access_request'
 
-  /journal/{clientId}/entries:
+  /journal/clients/{clientId}/entries:
     get:
       summary: Retrieve all journal entries for the authenticated client
       parameters:
@@ -223,7 +223,7 @@ paths:
 
 
 
-  /journal/{clientId}/journal-access-permissions:
+  /journal/clients/{clientId}/journal-access-permissions:
     put:
       summary: Manage journal access permissions for a client
       description: |
@@ -259,7 +259,7 @@ paths:
         "500":
           description: Internal server error
 
-  /journal/{clientId}/approve:
+  /journal/clients/{clientId}/approve:
     post:
       summary: Approve or reject journal access requests
       parameters:
@@ -290,7 +290,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/inline_response_200'
 
-  /journal/{clientId}/therapists:
+  /journal/clients/{clientId}/therapists:
     get:
       summary: View list of therapists with journal access
       parameters:
@@ -309,7 +309,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/therapist'
 
-  /journal/{clientId}/{journalId}:
+  /journal/clients/{clientId}/{journalId}:
     get:
       summary: Retrieve a single journal entry
       parameters:
@@ -373,7 +373,7 @@ paths:
         "204":
           description: Journal entry deleted
 
-  /session-slots/{therapistId}:
+  /therapists/{therapistId}/session-slots:
     post:
       summary: Create available session slots (Therapist)
       parameters:
@@ -414,7 +414,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/session_slot'
 
-  /session-slots/{therapistId}/appointments:
+  /therapists/{therapistId}/session-slots/appointments:
     post:
       summary: Request an appointment for an available session slot
       parameters:
@@ -437,8 +437,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/appointment_request'
 
-                
-  /session/{therapistId}/appointments:
     get:
       summary: List pending appointment requests
       parameters:
@@ -457,7 +455,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/appointment_request'
 
-  /session/{therapistId}/appointments/{appointmentId}:
+  /therapists/{therapistId}/session-slots/appointments/{appointmentId}:
     put:
       summary: Approve or reject an appointment request
       parameters:
