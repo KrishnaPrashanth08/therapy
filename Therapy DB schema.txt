@@ -1,0 +1,261 @@
+# Therapy Application DynamoDB Schema
+
+## 1. Clients Table
+**Purpose**: Stores information about therapy clients, including their personal details and relationships with therapists.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- email (String)
+- name (String)
+- password (String) - Hashed password for authentication
+- mappedTherapistsIds (String)
+
+**Global Secondary Indexes**:
+1. EmailIndex
+   - Partition Key: email
+   - Projection: ALL
+   - Purpose: Allows lookup of clients by email address for authentication
+
+2. MappedTherapistsIdIndex
+   - Partition Key: mappedTherapistsIds
+   - Projection: ALL
+   - Purpose: Allows lookup of clients by their therapist's ID to retrieve all clients for a specific therapist
+
+**API Operations**:
+- GetClientByID: GetItem operation on primary key ClientId
+- GetClientsByTherapist: Query MappedTherapistsIdIndex where mappedTherapistsIds = [therapist ID]
+
+## 2. Therapists Table
+**Purpose**: Stores information about therapists, including their professional details and client relationships.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- email (String)
+- password (String) - Hashed password for authentication
+- name (String)
+- expertise (String)
+- location (String)
+- mappedClientsIds (String)
+
+**Global Secondary Indexes**:
+1. EmailIndex
+   - Partition Key: email
+   - Projection: ALL
+   - Purpose: Allows lookup of therapists by email address for authentication
+
+2. LocationIndex
+   - Partition Key: location
+   - Projection: ALL
+   - Purpose: Allows clients to search for therapists by location
+
+3. ExpertiseIndex
+   - Partition Key: expertise
+   - Projection: ALL
+   - Purpose: Allows clients to search for therapists by expertise
+
+**API Operations**:
+- GetTherapistByID: GetItem operation on primary key TherapistId
+- SearchTherapistsByLocation: Query LocationIndex where location = [location]
+- SearchTherapistsByExpertise: Query ExpertiseIndex where expertise = [expertise]
+
+## 3. SessionSlots Table
+**Purpose**: Stores available time slots for therapy sessions offered by therapists.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- SlotId (String) - Sort Key
+- date (String)
+- startTime (String)
+- endTime (String)
+- status (String) - Available, Booked, Cancelled
+
+**API Operations**:
+- GetSlotsByTherapist: Query primary table where TherapistId = [therapist ID]
+- GetSlotsByTherapistAndDate: Query primary table where TherapistId = [therapist ID] and begins_with(SlotId, [date prefix])
+- CreateNewSlot: PutItem operation with primary key {TherapistId, SlotId}
+- UpdateSlotStatus: UpdateItem operation on primary key {TherapistId, SlotId}
+
+## 4. AppointmentRequests Table
+**Purpose**: Manages appointment requests from clients to therapists.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- AppointmentRequestId (String) - Sort Key
+- ClientId (String)
+- SlotId (String)
+- status (String) - Pending, Approved, Rejected, Cancelled
+
+**Global Secondary Indexes**:
+1. ClientAppointmentsIndex
+   - Partition Key: ClientId
+   - Sort Key: status
+   - Projection: ALL
+   - Purpose: Allows clients to view all their appointment requests and filter by status
+
+**API Operations**:
+- GetAppointmentRequestsByTherapist: Query primary table where TherapistId = [therapist ID]
+- GetAppointmentRequestsByClient: Query ClientAppointmentsIndex where ClientId = [client ID]
+- GetAppointmentRequestsByClientAndStatus: Query ClientAppointmentsIndex where ClientId = [client ID] and status = [status]
+- CreateAppointmentRequest: PutItem operation with primary key {TherapistId, AppointmentRequestId}
+- UpdateAppointmentRequestStatus: UpdateItem operation on primary key {TherapistId, AppointmentRequestId}
+
+## 5. Sessions Table
+**Purpose**: Records therapy sessions, including metadata and notes.
+
+**Attributes**:
+- TherapistId (String) - Partition Key
+- SessionId (String) - Sort Key
+- clientId (String)
+- date (String)
+- startTime (String)
+- endTime (String)
+- status (String) - Scheduled, Completed, Cancelled, No-Show
+- sharedNotes (String) - Notes visible to both therapist and client
+- privateNotes (String) - Notes visible only to therapist
+
+**Global Secondary Indexes**:
+1. ClientSessionsIndex
+   - Partition Key: clientId
+   - Sort Key: date
+   - Projection: ALL
+   - Purpose: Allows clients to view their session history sorted by date
+
+**API Operations**:
+- GetSessionsByTherapist: Query primary table where TherapistId = [therapist ID]
+- GetSessionsByClient: Query ClientSessionsIndex where clientId = [client ID]
+- GetSessionsByClientAndDate: Query ClientSessionsIndex where clientId = [client ID] and date = [date]
+- CreateSession: PutItem operation with primary key {TherapistId, SessionId}
+- UpdateSessionNotes: UpdateItem operation on primary key {TherapistId, SessionId}
+- UpdateSessionStatus: UpdateItem operation on primary key {TherapistId, SessionId}
+
+## 6. JournalEntries Table
+**Purpose**: Stores client's personal journal entries for therapeutic purposes.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- JournalEntryId (String) - Sort Key
+- createdAt (String)
+- time (String)
+- content (String)
+- feeling (String)
+- intensity (integer)
+
+**Global Secondary Indexes**:
+1. TimeIndex
+   - Partition Key: ClientId
+   - Sort Key: createdAt
+   - Projection: ALL
+   - Purpose: Allows clients to retrieve journal entries sorted by creation time
+
+**API Operations**:
+- GetJournalEntriesByClient: Query primary table where ClientId = [client ID]
+- GetJournalEntriesByTime: Query TimeIndex where ClientId = [client ID] 
+- GetJournalEntryById: GetItem operation on primary key {ClientId, JournalEntryId}
+- CreateJournalEntry: PutItem operation with primary key {ClientId, JournalEntryId}
+- UpdateJournalEntry: UpdateItem operation on primary key {ClientId, JournalEntryId}
+- DeleteJournalEntry: DeleteItem operation on primary key {ClientId, JournalEntryId}
+
+## 7. JournalAccessRequests Table
+**Purpose**: Manages therapist requests to access client journals.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- JournalAccessRequestId (String) - Sort Key
+- TherapistId (String)
+- createdAt (String)
+- status (String) - Pending, Approved, Rejected, Revoked
+
+**Global Secondary Indexes**:
+1. TherapistRequestsIndex
+   - Partition Key: TherapistId
+   - Sort Key: createdAt
+   - Projection: ALL
+   - Purpose: Allows therapists to view all access requests they've made
+
+**API Operations**:
+- GetAccessRequestsByClient: Query primary table where ClientId = [client ID]
+- GetAccessRequestsByTherapist: Query TherapistRequestsIndex where TherapistId = [therapist ID]
+- CreateAccessRequest: PutItem operation with primary key {ClientId, JournalAccessRequestId}
+- UpdateAccessRequestStatus: UpdateItem operation on primary key {ClientId, JournalAccessRequestId}
+
+## 8. MappingRequests Table
+**Purpose**: Tracks requests to establish client-therapist relationships.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- mappingRequestId (String) - Sort Key
+- therapistId (String)
+- createdAt (String)
+- status (String) - Pending, Approved, Rejected
+
+**Global Secondary Indexes**:
+1. TherapistMappingRequestsIndex
+   - Partition Key: therapistId
+   - Sort Key: createdAt
+   - Projection: ALL
+   - Purpose: Allows therapists to view all mapping requests they're involved in
+
+**API Operations**:
+- GetMappingRequestsByClient: Query primary table where ClientId = [client ID]
+- GetMappingRequestsByTherapist: Query TherapistMappingRequestsIndex where therapistId = [therapist ID]
+- CreateMappingRequest: PutItem operation with primary key {ClientId, mappingRequestId}
+- UpdateMappingRequestStatus: UpdateItem operation on primary key {ClientId, mappingRequestId}
+
+## 9. MappedTherapists Table
+**Purpose**: Records established client-therapist relationships.
+
+**Attributes**:
+- ClientId (String) - Partition Key
+- TherapistId (String) - Sort Key
+- mappedAt (String)
+
+**Global Secondary Indexes**:
+1. TherapistClientsIndex
+   - Partition Key: TherapistId
+   - Sort Key: mappedAt
+   - Projection: ALL
+   - Purpose: Allows therapists to view all clients mapped to them
+
+**API Operations**:
+- GetMappedTherapistsByClient: Query primary table where ClientId = [client ID]
+- GetMappedClientsByTherapist: Query TherapistClientsIndex where TherapistId = [therapist ID]
+- CreateTherapistMapping: PutItem operation with primary key {ClientId, TherapistId}
+- DeleteTherapistMapping: DeleteItem operation on primary key {ClientId, TherapistId}
+
+## 10. Messages Table
+**Purpose**: Handles secure communication between clients and therapists.
+
+**Attributes**:
+- messageId (String) - Partition Key
+- senderId (String)
+- recipientId (String)
+- timestamp (String)
+- content (String)
+- status (String) - Sent, Delivered, Read
+
+**Global Secondary Indexes**:
+1. SenderIndex
+   - Partition Key: senderId
+   - Sort Key: timestamp
+   - Projection: ALL
+   - Purpose: Allows users to view messages they've sent, sorted by time
+
+2. RecipientIndex
+   - Partition Key: recipientId
+   - Sort Key: timestamp
+   - Projection: ALL
+   - Purpose: Allows users to view messages they've received, sorted by time
+
+3. ConversationIndex
+   - Partition Key: senderId
+   - Sort Key: recipientId
+   - Projection: ALL
+   - Purpose: Allows users to view all messages in a conversation with another specific user
+
+**API Operations**:
+- GetMessageById: GetItem operation on primary key messageId
+- GetMessagesBySender: Query SenderIndex where senderId = [user ID]
+- GetMessagesByRecipient: Query RecipientIndex where recipientId = [user ID]
+- GetConversationMessages: Query ConversationIndex where senderId = [user ID] and recipientId = [user ID]
+- CreateMessage: PutItem operation with primary key messageId
+- UpdateMessageStatus: UpdateItem operation on primary key messageId
